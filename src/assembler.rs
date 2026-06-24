@@ -22,14 +22,14 @@ fn check_op_type(token: &str, t: Operand) -> bool {
     }
 }
 fn is_opcode(token: &str) -> bool {
-    matches!(token, "HALT" | "LOAD" | "ADD" | "STORE" | "JMP")
+    matches!(token, ".HALT" | ".LOAD" | ".ADD" | ".STORE" | ".JMP")
 }
 
 fn get_opcode_val(token: &str) -> u64 {
     match token {
-        "HALT" => OP_HALT,
-        "LOAD" => OP_LOAD,
-        "ADD" => OP_ADD,
+        ".HALT" => OP_HALT,
+        ".LOAD" => OP_LOAD,
+        ".ADD" => OP_ADD,
         _ => OP_HALT
     }
 }
@@ -68,25 +68,25 @@ fn compile_source(source_path: &str) -> Vec<u8> {
         let mut instr: u64 = 0;
 
         let number_arg1 = arg1.trim_start_matches(|c| c == '$' || c == '#' || c == ':');
-        let value1: u64 = number_arg1.parse::<u64>().expect("Failed to parse operand number");
+        let val1: u64 = number_arg1.parse::<u64>().expect("Failed to parse operand number");
         let number_arg2 = arg2.trim_start_matches(|c| c == '$' || c == '#' || c == ':');
-        let value2: u64 = number_arg2.parse::<u64>().expect("Failed to parse operand number");
+        let val2: u64 = number_arg2.parse::<u64>().expect("Failed to parse operand number");
         let number_arg3 = arg3.trim_start_matches(|c| c == '$' || c == '#' || c == ':');
-        let value3: u64 = number_arg3.parse::<u64>().expect("Failed to parse operand number");
+        let val3: u64 = number_arg3.parse::<u64>().expect("Failed to parse operand number");
 
-        instr |= get_opcode_val(opcode) | (value1 << 16) | (value2 << 32) | (value3 << 48);
+        instr |= get_opcode_val(opcode) | (val1 << 16) | (val2 << 32) | (val3 << 48);
 
         let bytes = instr.to_le_bytes();
         compiled_bytes.extend_from_slice(&bytes);
 
         match opcode{
             ".ADD" => {
-                if check_op_type(opcode, Operand::Reg) && check_op_type(arg1, Operand::Reg) && check_op_type(arg2, Operand::Reg) {
-                    i += 1;
-                    continue;
+                if check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) {
+                    println!("ADDED &{} &{} TO &{}", val1, val2, val3);
+                    i += 1; continue;
                 }
 
-                println!("Error on line: {}", line_count);
+                println!("[COMPILER ERROR] Error on line: {}", line_count);
                 break;
             }
             _=> {i += 1; continue;}
