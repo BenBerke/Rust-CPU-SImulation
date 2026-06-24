@@ -5,15 +5,12 @@ use std::path::PathBuf;
 use cpu_simulation::opcodes::*;
 use cpu_simulation::constants::SIZE_SECTOR;
 
-// Assemble the  bootloader and load into storage
-pub fn load_bootloader(bootloader_path: String, disk_file: &mut File) {
-    let mut bootloader_code = fs::read_to_string(&bootloader_path).expect("Couldn't read bootloader code");
+
+fn assemble_to_disk(source_path: String, disk_file: &mut File, sector_number: u64) {
+    let source_code = fs::read_to_string(&source_path).expect("Failed to read source file");
     let mut compiled_bytes: Vec<u8> = Vec::new();
 
-    let mut write_address = 0x7C00;
-
-    // Parser
-    let tokens: Vec<&str> = bootloader_code.split_whitespace().collect();
+    let tokens: Vec<&str> = source_code.split_whitespace().collect();
     for token in tokens {
         match token {
             "HALT" => compiled_bytes.push(OP_HALT),
@@ -27,35 +24,40 @@ pub fn load_bootloader(bootloader_path: String, disk_file: &mut File) {
         }
     }
 
-    if compiled_bytes.last() != Some(&OP_HALT) { compiled_bytes.push(OP_HALT); }
+    // Ensure it fits within one sector (512 bytes)
+    if compiled_bytes.len() > SIZE_SECTOR as usize { panic!("[ASSEMBLER] Error: File too large for one sector!"); }
 
-    // Padding to sector size
-    while compiled_bytes.len() < (SIZE_SECTOR - 2) as usize { compiled_bytes.push(0); }
+    // Pad with zeros to reach 512 bytes
+    while compiled_bytes.len() < SIZE_SECTOR as usize { compiled_bytes.push(0); }
 
-    // Magic numbers for the BIOS to know the bootloader location
-    compiled_bytes.push(0x55);
-    compiled_bytes.push(0xAA);
-
-    // Write to disk
-    disk_file.seek(SeekFrom::Start((0) as u64)).expect("Seek failed");
+    // Write to the specific sector offset
+    let disk_offset = sector_number * SIZE_SECTOR;
+    disk_file.seek(SeekFrom::Start(disk_offset)).expect("Seek failed");
     disk_file.write_all(&compiled_bytes).expect("Write failed");
 
-    println!("[ASSEMBLER] Bootloader loaded");
+    println!("[ASSEMBLER] Successfully wrote to sector {}", sector_number);
 }
 
 fn main(){
     let root_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-
-    let bootloader_path = root_dir.join("os").join("boot_loader");
-    let disk_storage_path = root_dir.join("memory").join("disk_storage");
-
     let mut disk_file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .open(disk_storage_path)
+        .read(true).write(true).create(true)
+        .open(root_dir.join("memory").join("disk_storage"))
         .expect("Couldn't open disk file");
 
-    load_bootloader(bootloader_path.to_string_lossy().into_owned(), &mut disk_file);
-    println!("[ASSEMBLER] Disk image successfully generated.");
+    // 1. Assemble the Bootloader into Sector 0
+    assemble_to_disk(
+        root_dir.join("os").join("boot_loader").to_string_lossy().into_owned(),
+        &mut disk_file,
+        0
+    );
+
+    // 2. Assemble the Kernel into Sector 1
+    assemble_to_disk(
+        root_dir.join("os").join("kernel").to_string_lossy().into_owned(),
+        &mut disk_file,
+        1
+    );
+
+    println!("[ASSEMBLER] Disk image built with Bootloader and Kernel.");
 }
