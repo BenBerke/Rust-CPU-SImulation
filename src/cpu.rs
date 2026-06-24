@@ -86,51 +86,5 @@ impl Core{
     }
     pub fn run(&mut self) {
         self.running = true;
-
-        while self.running {
-            let opcode = self.memory[self.pc];
-            self.pc += 1;
-            match opcode {
-                OP_HALT => {
-                    println!("HALT");
-                    self.running = false
-                },
-                OP_LOAD => {
-                    // [LDR] [reg_idx (1)] [val_high (1)] [val_low (1)]
-                    let reg_idx = self.consume_byte() as usize;
-                    let value = self.consume_u16();
-
-                    self.registers[reg_idx] = value;
-
-                    println!("LOADED {} TO {}", value, reg_idx);
-                }
-                OP_ADD => {
-                    // [OP_ADD] [reg_dest (1)] [reg_src1 (1)] [reg_src2 (1)]
-                    let reg_dest = self.consume_byte() as usize;
-                    let reg_src1 = self.consume_byte() as usize;
-                    let reg_src2 = self.consume_byte() as usize;
-
-                    self.registers[reg_dest] = self.registers[reg_src1] + self.registers[reg_src2];
-
-                    println!("ADD: R{} = R{} + R{}", reg_dest, reg_src1, reg_src2);
-                },
-                OP_STORE=> {
-                    //  [OP_STORE] [reg_src (1)] [addr_high (1)] [addr_low (1)]
-                    let reg_src = self.consume_byte() as usize;
-                    let ram_address = self.consume_u16() as usize;
-
-                    let reg_val = self.registers[reg_src];
-
-                    self.memory[ram_address] = (reg_val >> 8) as u8;
-                    self.memory[ram_address + 1] = (reg_val & 0xFF) as u8;
-
-                    println!("STORE: Wrote R{} ({}) into RAM address {}", reg_src, reg_src, ram_address);
-                },
-                _=>{
-                    println!("Unknown opcode {}", opcode);
-                    self.running = false
-                }
-            }
-        }
     }
 }
