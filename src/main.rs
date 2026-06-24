@@ -5,6 +5,7 @@ use std::path::PathBuf;
 mod opcodes;
 mod cpu;
 mod bootloader;
+mod constants;
 
 use cpu::Core;
 use crate::bootloader::load_bootloader;
@@ -15,8 +16,12 @@ fn main() {
     let bootloader_path = root_dir.join("os").join("boot_loader");
     let disk_storage_path = root_dir.join("memory").join("disk_storage");
 
-    let disk_file = OpenOptions::new().read(true).write(true).create(true).open(disk_storage_path).expect("Couldn't open disk");
+    let mut disk_file = OpenOptions::new().read(true).write(true).create(true).open(disk_storage_path).expect("Couldn't open disk");
 
-    let cpu = Core::new(disk_file);
-    load_bootloader(&cpu, bootloader_path.to_string_lossy().into_owned());
+    load_bootloader(bootloader_path.to_string_lossy().into_owned(), &mut disk_file);
+
+    let mut cpu = Core::new(disk_file);
+
+    if cpu.launch_bios(0) { cpu.run(); }
+    else { println!("Failed to launch bios"); }
 }

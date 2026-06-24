@@ -1,35 +1,45 @@
 use std::fs;
-use crate::cpu::Core;
-use crate::opcodes::{OP_ADD, OP_HALT};
+use std::fs::File;
+use std::io::{Seek, SeekFrom, Write};
+use crate::opcodes::*;
+use crate::constants::SIZE_SECTOR;
 
-pub fn load_bootloader(mut cpu: &Core, bootloader_path: String){
-    let mut bootloader_code = String::new();
-
-    // Turn boot_loader.
-    match fs::read_to_string(bootloader_path) {
-        Ok(contents) => { bootloader_code = contents; }
-        Err(e) => { println!("Error: {}", e); }
-    }
-
-    let mut chars = bootloader_code.chars().peekable();
-    let mut write_address = 0;
-
-    // Load the bootloader. Lexer
+// Assemble the  bootloader and load into storage
+pub fn load_bootloader(bootloader_path: String, disk_file: &mut File) {
+    let mut bootloader_code = fs::read_to_string(&bootloader_path).expect("Couldn't read bootloader code");
     let mut compiled_bytes: Vec<u8> = Vec::new();
 
-    while let Some(&c) = chars.peek() {
-        if c.is_whitespace(){ chars.next(); }
-        else if c.is_ascii_digit(){
-            let mut num_str = String::new();
+    let mut write_address = 0x7C00;
 
-            while let Some(&c) = chars.peek() {
-                if !c.is_ascii_alphabetic() { chars.next(); }
-                num_str.push(chars.next().unwrap());
+    // Parser
+    let tokens: Vec<&str> = bootloader_code.split_whitespace().collect();
+    for token in tokens {
+        match token {
+            "HALT" => compiled_bytes.push(OP_HALT),
+            "LOAD" => compiled_bytes.push(OP_LOAD),
+            "ADD" => compiled_bytes.push(OP_ADD),
+            "STORE" => compiled_bytes.push(OP_STORE),
+            val if val.chars().all(|c| c.is_numeric()) => {
+                compiled_bytes.push(val.parse::<u8>().expect("Invalid number"));
             }
-
-            let number_val: u8 = num_str.parse().unwrap();
-            compiled_bytes.push(number_val);
+            val => println!("[ASSEMBLER] Warning: Skipping unknown token '{}'", val),
         }
     }
+
+    if compiled_bytes.last() != Some(&OP_HALT) { compiled_bytes.push(OP_HALT); }
+
+    // Padding to sector size
+    while compiled_bytes.len() < (SIZE_SECTOR - 2) as usize { compiled_bytes.push(0); }
+
+    // Magic numbers for the BIOS to know the bootloader location
+    compiled_bytes.push(0x55);
+    compiled_bytes.push(0xAA);
+
+    // Write to disk
+    disk_file.seek(SeekFrom::Start((0) as u64)).expect("Seek failed");
+    disk_file.write_all(&compiled_bytes).expect("Write failed");
+
+    println!("[ASSEMBLER] Bootloader loaded");
 }
+
 

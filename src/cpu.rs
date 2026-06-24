@@ -2,10 +2,7 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 
 use crate::opcodes::*;
-
-const SIZE_SECTOR: u64 = 512;
-const SIZE_MEMORY: u64 = 1 * 1024 * 8;
-const REG_COUNT: u8 = 8;
+use crate::constants::*;
 
 pub struct Core{
     registers: [u16; REG_COUNT as usize],
@@ -45,6 +42,23 @@ impl Core{
         let ram_slice= &mut self.memory[start..end];
         self.disk_drive.read_exact(ram_slice).unwrap();
     }
+    pub fn launch_bios(&mut self, boot_sector:u64) -> bool {
+        println!("[BIOS] Launching BIOS...");
+
+        self.load_sector_from_disk(boot_sector, 0x7C00);
+
+        let sig_low = self.memory[0x7C00 + 510];
+        let sig_high = self.memory[0x7C00 + 511];
+
+        if sig_low == 0x55 && sig_high == 0xAA {
+            println!("[BIOS] BIOS is running");
+            self.pc = 0x7C00;
+            return true
+        }
+
+        println!("[BIOS] No bootable device is found");
+        false
+    }
     pub fn run(&mut self) {
         self.running = true;
 
@@ -73,8 +87,6 @@ impl Core{
                     self.registers[reg_dest] = self.registers[reg_src1] + self.registers[reg_src2];
 
                     println!("ADD: R{} = R{} + R{}", reg_dest, reg_src1, reg_src2);
-
-                    self.pc += 4;
                 },
                 OP_STORE=> {
                     //  [OP_STORE] [reg_src (1)] [addr_high (1)] [addr_low (1)]
