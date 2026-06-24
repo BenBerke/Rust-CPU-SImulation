@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::opcodes::*;
 use crate::constants::*;
@@ -42,6 +42,31 @@ impl Core{
         let ram_slice= &mut self.memory[start..end];
         self.disk_drive.read_exact(ram_slice).unwrap();
     }
+
+    fn write_raw_data(&mut self, sector: u64, data: &[u8]){
+        let disk_offset = sector * SIZE_SECTOR;
+
+        self.disk_drive.seek(SeekFrom::Start(disk_offset)).expect("Seek failed Write Raw Data");
+        self.disk_drive.write_all(data).expect("Write failed Write Raw Data");
+    }
+
+    pub fn write_to_disk(&mut self, ram_start: usize, ram_end: usize, sector: u64){
+        let data = &self.memory[ram_start..ram_end].to_vec();
+
+        self.write_raw_data(sector, data);
+
+        println!("[HARDWARE] Memory range {}..{} saved to sector {}", ram_start, ram_end, sector);
+    }
+
+    pub fn write_to_disk_large(&mut self, data: &[u8], start_sector: u64) {
+        let mut current_sector = start_sector;
+        for chunk in data.chunks(512) {
+            self.write_raw_data(current_sector, chunk);
+            current_sector += 1;
+        }
+        println!("[HARDWARE] Large write complete starting at sector {}", start_sector);
+    }
+
     pub fn launch_bios(&mut self, boot_sector:u64) -> bool {
         println!("[BIOS] Launching BIOS...");
 
