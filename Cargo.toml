@@ -3,4 +3,16 @@ name = "CPUSimulation"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "cpu_simulation"
+path = "src/lib.rs"
+
+[[bin]]
+name = "emulator"
+path = "src/main.rs"
+
+[[bin]]
+name = "assembler"
+path = "src/assembler.rs"
+
 [dependencies]

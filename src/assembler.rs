@@ -1,8 +1,9 @@
 use std::fs;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
-use crate::opcodes::*;
-use crate::constants::SIZE_SECTOR;
+use std::path::PathBuf;
+use cpu_simulation::opcodes::*;
+use cpu_simulation::constants::SIZE_SECTOR;
 
 // Assemble the  bootloader and load into storage
 pub fn load_bootloader(bootloader_path: String, disk_file: &mut File) {
@@ -42,4 +43,19 @@ pub fn load_bootloader(bootloader_path: String, disk_file: &mut File) {
     println!("[ASSEMBLER] Bootloader loaded");
 }
 
+fn main(){
+    let root_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
+    let bootloader_path = root_dir.join("os").join("boot_loader");
+    let disk_storage_path = root_dir.join("memory").join("disk_storage");
+
+    let mut disk_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(disk_storage_path)
+        .expect("Couldn't open disk file");
+
+    load_bootloader(bootloader_path.to_string_lossy().into_owned(), &mut disk_file);
+    println!("[ASSEMBLER] Disk image successfully generated.");
+}

@@ -15,7 +15,7 @@ pub struct Core{
 
 impl Core{
     pub fn new(disk_file: File) -> Box<Core>
-    { Box::new(Core { registers: [0;REG_COUNT as usize], memory:[0;SIZE_MEMORY as usize], disk_drive: disk_file, pc: 0, running: false }) }
+    { Box::new(Core { registers: [0;REG_COUNT as usize], memory:[0;SIZE_MEMORY as usize], disk_drive: disk_file, pc: 0x7C00, running: false }) }
 
     pub fn consume_byte(&mut self) -> u8 {
         let byte = self.memory[self.pc];
@@ -64,6 +64,7 @@ impl Core{
 
         while self.running {
             let opcode = self.memory[self.pc];
+            self.pc += 1;
             match opcode {
                 OP_HALT => {
                     println!("HALT");
