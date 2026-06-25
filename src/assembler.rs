@@ -31,10 +31,10 @@ fn check_op_type(token: &str, t: Operand) -> bool {
 fn get_opcode_val(token: &str) -> u64 {
     let Some(stripped) = token.strip_prefix('.') else { return !0; };
     match stripped {
-        "HALT" => OP_HALT,
-        "LOAD" => OP_LOAD,
-        "ADD" => OP_ADD,
-        "JMP" => OP_JMP,
+        "HALT"  => Opcode::Halt as u64,
+        "LOAD"  => Opcode::Load as u64,
+        "ADD"   => Opcode::Add as u64,
+        "JMP"   => Opcode::Jmp as u64,
         _ => !0
     }
 }

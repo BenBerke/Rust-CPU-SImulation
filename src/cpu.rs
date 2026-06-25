@@ -29,6 +29,13 @@ impl Core{
         low | (high << 8)
     }
 
+    pub fn consume_u64(&mut self) -> u64 {
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&self.memory[self.pc..self.pc+8]);
+        self.pc += 8;
+        u64::from_le_bytes(bytes)
+    }
+
     pub fn load_sector_from_disk(&mut self, sector_number: u64, ram_target_address: u64){
         let disk_offset = sector_number * SIZE_SECTOR;
 
@@ -86,5 +93,30 @@ impl Core{
     }
     pub fn run(&mut self) {
         self.running = true;
+        println!("[CPU] Starting execution loop at PC: 0x{:04X}...", self.pc);
+
+        while self.running {
+            if INSTR_START > self.pc || self.pc >= INSTR_END {
+                println!("[CPU] Segfault. PC (0x{:04X}) attempted to execute non-code memory.", self.pc);
+                self.running = false;
+                break;
+            }
+
+            let instr = self.consume_u64();
+            let opcode = (instr & 0xFFFF) as u16;
+            let val1 = ((instr >> 16) & 0xFFFF) as usize;
+            let val2 = ((instr >> 32) & 0xFFFF) as u16;
+            let val3 = ((instr >> 48) & 0xFFFF) as u16;
+
+            match Opcode::try_from(opcode) {
+                Ok(Opcode::Halt) => { println!("[CPU] halt"); self.running = false; break;}
+                Ok(Opcode::Add) => {
+                    // Run add logic...
+                }
+                Err(_) => {
+                    println!("[CPU ERROR] Unknown opcode '{}'", opcode); self.running = false; break; }
+                _ => {println!("[CPU ERROR] Unknown opcode '{}'", opcode); self.running = false; break;}
+            }
+        }
     }
 }
