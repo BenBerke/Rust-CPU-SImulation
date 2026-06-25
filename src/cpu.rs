@@ -24,9 +24,9 @@ impl Core{
     }
 
     pub fn consume_u16(&mut self) -> u16 {
-        let high = self.consume_byte() as u16;
         let low = self.consume_byte() as u16;
-        (high << 8) | low
+        let high = self.consume_byte() as u16;
+        low | (high << 8)
     }
 
     pub fn load_sector_from_disk(&mut self, sector_number: u64, ram_target_address: u64){
