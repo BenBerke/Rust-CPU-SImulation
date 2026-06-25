@@ -5,7 +5,7 @@ use crate::opcodes::*;
 use crate::constants::*;
 
 pub struct Core{
-    registers: [u16; REG_COUNT as usize],
+    registers: [u16; REG_COUNT as usize], // reg0 = eax
     memory: [u8;SIZE_MEMORY as usize], // Main memory
     disk_drive: File,
 
@@ -15,7 +15,7 @@ pub struct Core{
 
 impl Core{
     pub fn new(disk_file: File) -> Box<Core>
-    { Box::new(Core { registers: [0;REG_COUNT as usize], memory:[0;SIZE_MEMORY as usize], disk_drive: disk_file, pc: 0x7C00, running: false }) }
+    { Box::new(Core { registers: [0;REG_COUNT as usize], memory:[0;SIZE_MEMORY as usize], disk_drive: disk_file, pc: 0, running: false }) }
 
     pub fn consume_byte(&mut self) -> u8 {
         let byte = self.memory[self.pc];
@@ -77,14 +77,15 @@ impl Core{
     pub fn launch_bios(&mut self, boot_sector:u64) -> bool {
         println!("[BIOS] Launching BIOS...");
 
-        self.load_sector_from_disk(boot_sector, 0x7C00);
+        self.load_sector_from_disk(boot_sector, 0);
 
-        let sig_low = self.memory[0x7C00 + 510];
-        let sig_high = self.memory[0x7C00 + 511];
+        // Magic addresses to ensure bios is there
+        let sig_low = self.memory[510];
+        let sig_high = self.memory[511];
 
         if sig_low == 0x55 && sig_high == 0xAA {
             println!("[BIOS] BIOS is running");
-            self.pc = 0x7C00;
+            self.pc = 0x0;
             return true
         }
 
@@ -95,6 +96,7 @@ impl Core{
         self.running = true;
         println!("[CPU] Starting execution loop at PC: 0x{:04X}...", self.pc);
 
+        // Instruction Cycle
         while self.running {
             if INSTR_START > self.pc || self.pc >= INSTR_END {
                 println!("[CPU] Segfault. PC (0x{:04X}) attempted to execute non-code memory.", self.pc);
@@ -105,14 +107,20 @@ impl Core{
             let instr = self.consume_u64();
             let opcode = (instr & 0xFFFF) as u16;
             let val1 = ((instr >> 16) & 0xFFFF) as usize;
-            let val2 = ((instr >> 32) & 0xFFFF) as u16;
-            let val3 = ((instr >> 48) & 0xFFFF) as u16;
+            let val2 = ((instr >> 32) & 0xFFFF) as usize;
+            let val3 = ((instr >> 48) & 0xFFFF) as usize;
 
             match Opcode::try_from(opcode) {
-                Ok(Opcode::Halt) => { println!("[CPU] halt"); self.running = false; break;}
-                Ok(Opcode::Add) => {
-                    // Run add logic...
-                }
+                Ok(Opcode::Halt) => { self.running = false; break;}
+                Ok(Opcode::Load) => { self.registers[val1] = self.registers[val2] }
+                Ok(Opcode::Add) => { self.registers[val1] = self.registers[val2] + self.registers[val3]; }
+                Ok(Opcode::Store) => { self.memory[val1] = self.registers[2] as u8; }
+                Ok(Opcode::Jmp) => {self.pc = val1 }
+                Ok(Opcode::SaveDisk) => { self.write_to_disk(val2, val3, val1 as u64)}
+                Ok(Opcode::Sub) => { self.registers[val1] = self.registers[val2] - self.registers[val3]; }
+                Ok(Opcode::Mul) => { self.registers[val1] = self.registers[val2] * self.registers[val3]; }
+                Ok(Opcode::Div) => { self.registers[val1] = self.registers[val2] / self.registers[val3]; }
+
                 Err(_) => {
                     println!("[CPU ERROR] Unknown opcode '{}'", opcode); self.running = false; break; }
                 _ => {println!("[CPU ERROR] Unknown opcode '{}'", opcode); self.running = false; break;}

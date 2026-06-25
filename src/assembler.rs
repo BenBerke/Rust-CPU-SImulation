@@ -128,6 +128,9 @@ fn compile_source(source_path: &str) -> Vec<u8> {
             Ok(Opcode::Store) => { check_op_type(arg1, Imm32) && check_op_type(arg2, Reg) }
             Ok(Opcode::Jmp) => { symbol_table.contains_key(arg1.trim_start_matches(':')) || check_op_type(arg1, Imm) }
             Ok(Opcode::SaveDisk) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
+            Ok(Opcode::Sub) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
+            Ok(Opcode::Mul) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
+            Ok(Opcode::Div) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
 
             Err(_) => false,
         };
@@ -187,8 +190,12 @@ fn compile_source(source_path: &str) -> Vec<u8> {
 fn assemble_to_disk(source_path: String, disk_file: &mut File, sector_number: u64) {
     let mut bytes = compile_source(&source_path);
 
-    if bytes.len() > SIZE_SECTOR as usize { panic!("File too large!"); }
-    while bytes.len() < SIZE_SECTOR as usize { bytes.push(0); }
+    if bytes.len() > (SIZE_SECTOR - 2) as usize { panic!("File too large!");  }
+    while bytes.len() < (SIZE_SECTOR - 2) as usize { bytes.push(0); }
+
+    // Magic values to tell the CPU that the bootloader is loaded
+    bytes.push(0x55);
+    bytes.push(0xAA);
 
     let disk_offset = sector_number * SIZE_SECTOR;
     disk_file.seek(SeekFrom::Start(disk_offset)).expect("Seek failed");
