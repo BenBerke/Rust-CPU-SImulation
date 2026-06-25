@@ -16,3 +16,4 @@ name = "assembler"
 path = "src/assembler.rs"
 
 [dependencies]
+minifb = "0.28"

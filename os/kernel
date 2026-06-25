@@ -1,2 +1,4 @@
-.LDI $0 #0x0
+; Kernel
+
+.LDI $0 #0
 .HLT

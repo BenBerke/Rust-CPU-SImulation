@@ -1,10 +1,9 @@
-; 512 should be 0x44
-; 513 should be 0xBB
-; Otherwise kernel is missing
-
+; ===Purpose===:
 ; Load kernel from disk to memory and boot it
 ; Kernel count is at 514 and 515
-
+; 512 should be 0x44
+; 513 should be 0xBB
+; Otherwise it means the kernel is missing
 
 ; === Load Sector 1 to RAM ===
 .LDI $1 #1
