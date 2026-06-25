@@ -30,13 +30,15 @@ macro_rules! define_opcodes {
 
 define_opcodes! {
     Halt     = 0 => "HLT",      // Halts execution
-    Load     = 1 => "LOAD",     // reg imm / reg = imm
     Add      = 2 => "ADD",      // reg1 reg2 reg3 / reg1 = reg2 + reg3
-    Store    = 3 => "STR",      // %imm32 reg / memory[%imm32] = reg
-    Jmp      = 4 => "JMP",      // sym / pc = sym
+    LoadMem    = 3 => "LDM",      // reg imm32  / reg = memory[imm32]
+    Jmp      = 4 => "JSM",      // sym / pc = sym
     SaveDisk = 5 => "SDK",      // reg1 reg2 reg3 / drive[reg1] = memory[reg2..reg3]
     Sub      = 6 => "SUB",      // reg1 reg2 reg3 / reg1 = reg2 + reg3
     Mul      = 7 => "MUL",      // reg1 reg2 reg3 / reg1 = reg2 + reg3
     Div      = 8 => "DIV",      // reg1 reg2 reg3 / reg1 = reg2 + reg3
-
+    JmpAbs   = 9 => "JAB",      // imm32 / pc = imm32
+    JumpZero = 10 => "JZF",     // sym reg / reg = 0 -> pc = sym
+    LoadImm     = 11 => "LDI",     // reg imm / reg = imm
+    Store    = 12 => "STR",     // imm32 reg / mem[imm32] = reg
 }

@@ -1,12 +1,11 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
-
 use crate::opcodes::*;
 use crate::constants::*;
 
 pub struct Core{
-    registers: [u16; REG_COUNT as usize], // reg0 = eax
-    memory: [u8;SIZE_MEMORY as usize], // Main memory
+    regs: [u16; REG_COUNT as usize], // reg0 = eax
+    mem: [u8;SIZE_MEMORY as usize], // Main memory
     disk_drive: File,
 
     pc: usize, // Program Counter (points to current instruction)
@@ -15,10 +14,10 @@ pub struct Core{
 
 impl Core{
     pub fn new(disk_file: File) -> Box<Core>
-    { Box::new(Core { registers: [0;REG_COUNT as usize], memory:[0;SIZE_MEMORY as usize], disk_drive: disk_file, pc: 0, running: false }) }
+    { Box::new(Core { regs: [0;REG_COUNT as usize], mem:[0;SIZE_MEMORY as usize], disk_drive: disk_file, pc: 0, running: false }) }
 
     pub fn consume_byte(&mut self) -> u8 {
-        let byte = self.memory[self.pc];
+        let byte = self.mem[self.pc];
         self.pc += 1;
         byte
     }
@@ -31,7 +30,7 @@ impl Core{
 
     pub fn consume_u64(&mut self) -> u64 {
         let mut bytes = [0u8; 8];
-        bytes.copy_from_slice(&self.memory[self.pc..self.pc+8]);
+        bytes.copy_from_slice(&self.mem[self.pc..self.pc+8]);
         self.pc += 8;
         u64::from_le_bytes(bytes)
     }
@@ -46,7 +45,7 @@ impl Core{
         let start = ram_target_address as usize;
         let end = start + SIZE_SECTOR as usize;
 
-        let ram_slice= &mut self.memory[start..end];
+        let ram_slice= &mut self.mem[start..end];
         self.disk_drive.read_exact(ram_slice).unwrap();
     }
 
@@ -58,7 +57,7 @@ impl Core{
     }
 
     pub fn write_to_disk(&mut self, ram_start: usize, ram_end: usize, sector: u64){
-        let data = &self.memory[ram_start..ram_end].to_vec();
+        let data = &self.mem[ram_start..ram_end].to_vec();
 
         self.write_raw_data(sector, data);
 
@@ -80,8 +79,8 @@ impl Core{
         self.load_sector_from_disk(boot_sector, 0);
 
         // Magic addresses to ensure bios is there
-        let sig_low = self.memory[510];
-        let sig_high = self.memory[511];
+        let sig_low = self.mem[510];
+        let sig_high = self.mem[511];
 
         if sig_low == 0x55 && sig_high == 0xAA {
             println!("[BIOS] BIOS is running");
@@ -93,6 +92,7 @@ impl Core{
         false
     }
     pub fn run(&mut self) {
+        use Opcode::*;
         self.running = true;
         println!("[CPU] Starting execution loop at PC: 0x{:04X}...", self.pc);
 
@@ -109,17 +109,45 @@ impl Core{
             let val1 = ((instr >> 16) & 0xFFFF) as usize;
             let val2 = ((instr >> 32) & 0xFFFF) as usize;
             let val3 = ((instr >> 48) & 0xFFFF) as usize;
-
             match Opcode::try_from(opcode) {
-                Ok(Opcode::Halt) => { self.running = false; break;}
-                Ok(Opcode::Load) => { self.registers[val1] = self.registers[val2] }
-                Ok(Opcode::Add) => { self.registers[val1] = self.registers[val2] + self.registers[val3]; }
-                Ok(Opcode::Store) => { self.memory[val1] = self.registers[2] as u8; }
-                Ok(Opcode::Jmp) => {self.pc = val1 }
-                Ok(Opcode::SaveDisk) => { self.write_to_disk(val2, val3, val1 as u64)}
-                Ok(Opcode::Sub) => { self.registers[val1] = self.registers[val2] - self.registers[val3]; }
-                Ok(Opcode::Mul) => { self.registers[val1] = self.registers[val2] * self.registers[val3]; }
-                Ok(Opcode::Div) => { self.registers[val1] = self.registers[val2] / self.registers[val3]; }
+                Ok(Halt) => {
+                    let exit_code = self.regs[0];
+                    println!("\n--- [CPU] Program Terminated ---");
+
+                    if exit_code == 0{ println!("[STATUS] SUCCESS"); }
+                    else { println!("[STATUS] Error! Program exited with code: 0x{:04X} ({})", exit_code, exit_code); }
+
+                    self.running = false; break;
+                }
+
+                Ok(Add) => { self.regs[val1] = self.regs[val2] + self.regs[val3]; }
+                Ok(Sub) => { self.regs[val1] = self.regs[val2] - self.regs[val3]; }
+                Ok(Mul) => { self.regs[val1] = self.regs[val2] * self.regs[val3]; }
+                Ok(Div) => { self.regs[val1] = self.regs[val2] / self.regs[val3]; }
+
+                Ok(SaveDisk) => { self.write_to_disk(val2, val3, val1 as u64)}
+
+                Ok(LoadMem) => {
+                    let addr = val2 as usize;
+
+                    let low_byte = self.mem[addr] as u16;
+                    let high_byte = self.mem[addr + 1] as u16;
+
+                    self.regs[val1] = low_byte | (high_byte << 8);
+                }
+                Ok(LoadImm) => {self.regs[val1] = val2 as u16}
+                Ok(Store) => {
+                    let addr = val1;
+                    let register_value = self.regs[val2];
+
+                    self.mem[addr] = (register_value & 0xFF) as u8;
+
+                    self.mem[addr + 1] = ((register_value >> 8) & 0xFF) as u8;
+                }
+
+                Ok(Jmp) => {self.pc = val1 }
+                Ok(JmpAbs) => { self.pc = val1 }
+                Ok(JumpZero) => { if self.regs[val2] == 0 { self.pc = val1} }
 
                 Err(_) => {
                     println!("[CPU ERROR] Unknown opcode '{}'", opcode); self.running = false; break; }

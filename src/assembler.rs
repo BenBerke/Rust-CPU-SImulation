@@ -5,7 +5,7 @@ use std::io::{Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use cpu_simulation::opcodes::*;
 use cpu_simulation::constants::SIZE_SECTOR;
-use crate::Operand::Reg;
+use crate::Operand::{Imm32, Reg};
 
 #[derive(Debug, PartialEq)]
 enum Operand{
@@ -33,6 +33,17 @@ fn check_op_type(token: &str, t: Operand) -> bool {
 fn get_opcode_val(token: &str) -> u64 {
     let Some(stripped) = token.strip_prefix('.') else { return !0; };
     Opcode::from_str(stripped).unwrap_or(!0)
+}
+
+fn parse_number(clean: &str)->Result<u64, String>{
+    if clean.is_empty() { return Err("empty literal".to_string()); }
+
+    if let Some(hex) = clean.strip_prefix("0x").or_else(|| clean.strip_prefix("0X")) {
+        return u64::from_str_radix(hex, 16)
+            .map_err(|_| format!("invalid hex literal '{}'", clean));
+    }
+
+    clean.parse::<u64>().map_err(|_| format!("invalid decimal literal '{}'", clean))
 }
 
 // Assume format: [Opcode (16bit) | Op1 (16bit) | Op2 (16bit) | Op3 (16bit)]
@@ -121,17 +132,19 @@ fn compile_source(source_path: &str) -> Vec<u8> {
         let arg2 = &line.tokens[2];
         let arg3 = &line.tokens[3];
 
-        let is_valid = match Opcode::try_from(opcode_val as u16) {
-            Ok(Opcode::Halt) => true,
-            Ok(Opcode::Load) => { check_op_type(arg1, Reg) && check_op_type(arg2, Imm) }
-            Ok(Opcode::Add) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
-            Ok(Opcode::Store) => { check_op_type(arg1, Imm32) && check_op_type(arg2, Reg) }
-            Ok(Opcode::Jmp) => { symbol_table.contains_key(arg1.trim_start_matches(':')) || check_op_type(arg1, Imm) }
-            Ok(Opcode::SaveDisk) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
-            Ok(Opcode::Sub) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
-            Ok(Opcode::Mul) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
-            Ok(Opcode::Div) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
+        use Opcode::*; // Import all variants
 
+        let is_valid = match Opcode::try_from(opcode_val as u16) {
+            Ok(Halt) => true,
+            Ok(LoadImm) => check_op_type(arg1, Reg) && check_op_type(arg2, Imm),
+            Ok(Add) | Ok(Sub) | Ok(Mul) | Ok(Div) | Ok(SaveDisk) => {
+                check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg)
+            },
+            Ok(LoadMem) => check_op_type(arg1, Reg) && check_op_type(arg2, Imm32),
+            Ok(Jmp) => symbol_table.contains_key(arg1.trim_start_matches(':')) || check_op_type(arg1, Imm),
+            Ok(JmpAbs) => check_op_type(arg1, Imm32),
+            Ok(JumpZero) => check_op_type(arg1, Sym) && check_op_type(arg2, Reg),
+            Ok(Store) => check_op_type(arg1, Imm32) && check_op_type(arg2, Reg),
             Err(_) => false,
         };
 
@@ -141,16 +154,54 @@ fn compile_source(source_path: &str) -> Vec<u8> {
             break;
         }
 
-        let resolve_arg = |token: &str| -> u64{
+        let resolve_arg = |token: &str| -> Result<u64, String> {
             let clean_token = token.trim_start_matches(|c| c == '$' || c == '#' || c == ':' || c == '@' || c == '%');
 
-            if let Some(&address) = symbol_table.get(clean_token) { address as u64 }
-            else { clean_token.parse::<u64>().unwrap_or(0) }
+            if let Some(&address) = symbol_table.get(clean_token) { Ok(address as u64) }
+            else { parse_number(clean_token) }
         };
 
-        let mut val1 = resolve_arg(arg1);
-        let mut val2 = resolve_arg(arg2);
-        let mut val3 = resolve_arg(arg3);
+        let mut val1 = match resolve_arg(arg1) {
+            Ok(v) => v,
+            Err(e) => {
+                println!(
+                    "[COMPILER ERROR] Failed to parse arg1 '{}' on line {}: {}",
+                    arg1,
+                    line.line_number,
+                    e
+                );
+                standard_compilation_success = false;
+                break;
+            }
+        };
+
+        let mut val2 = match resolve_arg(arg2) {
+            Ok(v) => v,
+            Err(e) => {
+                println!(
+                    "[COMPILER ERROR] Failed to parse arg2 '{}' on line {}: {}",
+                    arg2,
+                    line.line_number,
+                    e
+                );
+                standard_compilation_success = false;
+                break;
+            }
+        };
+
+        let mut val3 = match resolve_arg(arg3) {
+            Ok(v) => v,
+            Err(e) => {
+                println!(
+                    "[COMPILER ERROR] Failed to parse arg3 '{}' on line {}: {}",
+                    arg3,
+                    line.line_number,
+                    e
+                );
+                standard_compilation_success = false;
+                break;
+            }
+        };
 
         // Special case for some instruction where first number is 32 bit.
         let mut instr: u64 = 0;
@@ -203,12 +254,16 @@ fn assemble_to_disk(source_path: String, disk_file: &mut File, sector_number: u6
 }
 
 fn assemble_to_disk_multisector(source_path: String, disk_file: &mut File, start_sector: u64){
-    let mut bytes = compile_source(&source_path);
+    let raw_code_bytes = compile_source(&source_path);
+    let mut bytes = Vec::new();
+
+    bytes.push(0x44);
+    bytes.push(0xBB);
+
+    bytes.extend(raw_code_bytes);
 
     let remainder = bytes.len() % SIZE_SECTOR as usize;
-    if remainder != 0 {
-        for _ in 0..(SIZE_SECTOR as usize - remainder) { bytes.push(0); }
-    }
+    if remainder != 0 { for _ in 0..(SIZE_SECTOR as usize - remainder) { bytes.push(0); } }
 
     let chunks = bytes.chunks(SIZE_SECTOR as usize);
     for (i, chunks) in chunks.enumerate() {
@@ -220,7 +275,6 @@ fn assemble_to_disk_multisector(source_path: String, disk_file: &mut File, start
 
         println!("[ASSEMBLER] Written chunk {} to sector {}", i, sector_number);
     }
-
 }
 
 fn main(){
