@@ -2,3 +2,4 @@
 :loop
 .ADD $2 $2 $2
 .JMP loop
+.STORE %1 $1

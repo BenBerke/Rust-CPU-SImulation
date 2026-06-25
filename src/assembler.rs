@@ -11,6 +11,7 @@ use crate::Operand::Reg;
 enum Operand{
     Reg,
     Imm,
+    Imm32,
     Sym, // Labels
     PH, // Padding
 }
@@ -24,19 +25,14 @@ fn check_op_type(token: &str, t: Operand) -> bool {
     match t {
         Operand::Reg => token.starts_with('$'),
         Operand::Imm => token.starts_with('#'),
+        Operand::Imm32 => token.starts_with('%'),
         Operand::Sym => token.starts_with(':'),
         Operand::PH => token.starts_with('@'),
     }
 }
 fn get_opcode_val(token: &str) -> u64 {
     let Some(stripped) = token.strip_prefix('.') else { return !0; };
-    match stripped {
-        "HALT"  => Opcode::Halt as u64,
-        "LOAD"  => Opcode::Load as u64,
-        "ADD"   => Opcode::Add as u64,
-        "JMP"   => Opcode::Jmp as u64,
-        _ => !0
-    }
+    Opcode::from_str(stripped).unwrap_or(!0)
 }
 
 // Assume format: [Opcode (16bit) | Op1 (16bit) | Op2 (16bit) | Op3 (16bit)]
@@ -100,9 +96,7 @@ fn compile_source(source_path: &str) -> Vec<u8> {
             symbol_table.insert(label.to_string(), current_offset);
         }
 
-        if get_opcode_val(first_token) != !0 {
-            current_offset += 8;
-        }
+        if get_opcode_val(first_token) != !0 { current_offset += 8; }
     }
 
     let mut standard_compilation_success = true;
@@ -127,12 +121,15 @@ fn compile_source(source_path: &str) -> Vec<u8> {
         let arg2 = &line.tokens[2];
         let arg3 = &line.tokens[3];
 
-        let is_valid = match opcode.strip_prefix('.').unwrap_or(opcode) {
-            "ADD" | "SUB" => check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg),
-            "MOV"         => check_op_type(arg1, Reg) && check_op_type(arg2, Imm),
-            "JMP"         => symbol_table.contains_key(arg1), // JMP expects a Label argument
-            "HALT"        => true,
-            _             => false,
+        let is_valid = match Opcode::try_from(opcode_val as u16) {
+            Ok(Opcode::Halt) => true,
+            Ok(Opcode::Load) => { check_op_type(arg1, Reg) && check_op_type(arg2, Imm) }
+            Ok(Opcode::Add) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
+            Ok(Opcode::Store) => { check_op_type(arg1, Imm32) && check_op_type(arg2, Reg) }
+            Ok(Opcode::Jmp) => { symbol_table.contains_key(arg1.trim_start_matches(':')) || check_op_type(arg1, Imm) }
+            Ok(Opcode::SaveDisk) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg) }
+
+            Err(_) => false,
         };
 
         if !is_valid {
@@ -142,19 +139,28 @@ fn compile_source(source_path: &str) -> Vec<u8> {
         }
 
         let resolve_arg = |token: &str| -> u64{
-            let clean_token = token.trim_start_matches(|c| c == '$' || c == '#' || c == ':' || c == '@');
+            let clean_token = token.trim_start_matches(|c| c == '$' || c == '#' || c == ':' || c == '@' || c == '%');
 
             if let Some(&address) = symbol_table.get(clean_token) { address as u64 }
             else { clean_token.parse::<u64>().unwrap_or(0) }
         };
 
-        let val1 = resolve_arg(arg1);
-        let val2 = resolve_arg(arg2);
-        let val3 = resolve_arg(arg3);
+        let mut val1 = resolve_arg(arg1);
+        let mut val2 = resolve_arg(arg2);
+        let mut val3 = resolve_arg(arg3);
 
-
+        // Special case for some instruction where first number is 32 bit.
         let mut instr: u64 = 0;
-        instr |= get_opcode_val(&*opcode) | (val1 << 16) | (val2 << 32) | (val3 << 48);
+        if let Ok(Opcode::Store) = Opcode::try_from(opcode_val as u16) {
+            let full_address = val1; // Hold the 32-bit address (1)
+            let reg_source = val2;   // Hold the register index (1)
+
+            val1 = (full_address >> 16) & 0xFFFF;
+            val2 = full_address & 0xFFFF;
+            val3 = reg_source;
+
+            instr = opcode_val | (val1 << 16) | (val2 << 32) | (val3 << 48);
+        } else { instr |= opcode_val | (val1 << 16) | (val2 << 32) | (val3 << 48); }
 
         // --- DETAILED ASSEMBLER DEBUGGER ---
         #[cfg(debug_assertions)]
