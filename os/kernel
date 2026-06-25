@@ -1,2 +1,2 @@
-.LDI $0 #0xFAAA
+.LDI $0 #0x0
 .HLT

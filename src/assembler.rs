@@ -123,7 +123,10 @@ fn compile_source(source_path: &str) -> Vec<u8> {
         let opcode_val = get_opcode_val(opcode);
 
         if opcode_val == !0 {
-            println!("[COMPILER ERROR] Unknown instruction '{}' on line: {}", opcode, line.line_number);
+            println!(
+                "{}[COMPILER ERROR]{} Unknown instruction '{}' on line: {}",
+                "\x1b[31m", "\x1b[0m", opcode, line.line_number
+            );
             standard_compilation_success = false;
             break;
         }
@@ -145,11 +148,12 @@ fn compile_source(source_path: &str) -> Vec<u8> {
             Ok(JmpAbs) => check_op_type(arg1, Imm32),
             Ok(JumpZero) => check_op_type(arg1, Sym) && check_op_type(arg2, Reg),
             Ok(Store) => check_op_type(arg1, Imm32) && check_op_type(arg2, Reg),
+            Ok(DTM) => check_op_type(arg1, Imm32) && check_op_type(arg2, Imm32) && check_op_type(arg3, Reg),
             Err(_) => false,
         };
 
         if !is_valid {
-            println!("[COMPILER ERROR] Invalid arguments for '{}' on line: {}", opcode, line.line_number);
+            println!("\x1b[1;31m[COMPILER ERROR]\x1b[0m Invalid arguments for '{}' on line: {}", opcode, line.line_number);
             standard_compilation_success = false;
             break;
         }
@@ -165,7 +169,7 @@ fn compile_source(source_path: &str) -> Vec<u8> {
             Ok(v) => v,
             Err(e) => {
                 println!(
-                    "[COMPILER ERROR] Failed to parse arg1 '{}' on line {}: {}",
+                    "\x1b[1;31m[COMPILER ERROR]\x1b[0m Failed to parse arg1 '{}' on line {}: {}",
                     arg1,
                     line.line_number,
                     e
@@ -179,7 +183,7 @@ fn compile_source(source_path: &str) -> Vec<u8> {
             Ok(v) => v,
             Err(e) => {
                 println!(
-                    "[COMPILER ERROR] Failed to parse arg2 '{}' on line {}: {}",
+                    "\x1b[1;31m[COMPILER ERROR]\x1b[0m Failed to parse arg2 '{}' on line {}: {}",
                     arg2,
                     line.line_number,
                     e
@@ -193,7 +197,7 @@ fn compile_source(source_path: &str) -> Vec<u8> {
             Ok(v) => v,
             Err(e) => {
                 println!(
-                    "[COMPILER ERROR] Failed to parse arg3 '{}' on line {}: {}",
+                    "\x1b[1;31m[COMPILER ERROR]\x1b[0m Failed to parse arg3 '{}' on line {}: {}",
                     arg3,
                     line.line_number,
                     e
@@ -234,7 +238,7 @@ fn compile_source(source_path: &str) -> Vec<u8> {
         compiled_bytes.extend_from_slice(&instr.to_le_bytes());
     }
 
-    if !standard_compilation_success { compiled_bytes.clear(); }
+    if !standard_compilation_success { compiled_bytes.clear(); std::process::exit(1);}
     compiled_bytes
 }
 
@@ -257,9 +261,19 @@ fn assemble_to_disk_multisector(source_path: String, disk_file: &mut File, start
     let raw_code_bytes = compile_source(&source_path);
     let mut bytes = Vec::new();
 
+    // Bytes 512 & 513: Magic Kernel Signature
     bytes.push(0x44);
     bytes.push(0xBB);
 
+    let total_unpadded_len = 2 + 2 + raw_code_bytes.len();
+    let sector_count = (total_unpadded_len + SIZE_SECTOR as usize - 1) / SIZE_SECTOR as usize;
+
+    // Bytes 514 & 515: Sector Count (Stored as a 16-bit Little-Endian value)
+    let count_u16 = sector_count as u16;
+    bytes.push((count_u16 & 0xFF) as u8);        // Byte 514 (Low Byte)
+    bytes.push(((count_u16 >> 8) & 0xFF) as u8);  // Byte 515 (High Byte)
+
+    // Byte 516+: Actual Kernel Code begins here
     bytes.extend(raw_code_bytes);
 
     let remainder = bytes.len() % SIZE_SECTOR as usize;

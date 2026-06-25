@@ -154,6 +154,32 @@ impl Core{
                         self.regs[val1]
                     );
                 }
+
+                Ok(DTM) => {
+                    let start_sector = val1;
+                    let mut ram_dest = val2;
+                    let sector_count = val3;
+
+                    for i in 0..sector_count {
+                        let mut ram_dest = val1;
+                        let start_sector = val2 as u64;
+                        let sector_count = self.regs[val3] as u64;
+
+                        for i in 0..sector_count {
+                            let current_sector = start_sector + i;
+                            let disk_offset = current_sector * SIZE_SECTOR;
+
+                            self.disk_drive.seek(SeekFrom::Start(disk_offset)).unwrap();
+
+                            let ram_slice = &mut self.mem[ram_dest..(ram_dest + SIZE_SECTOR as usize)];
+
+                            self.disk_drive.read_exact(ram_slice).expect("DMA Disk read failed");
+
+                            ram_dest += SIZE_SECTOR as usize;
+                        }
+                    }
+                }
+
                 Ok(LoadImm) => {self.regs[val1] = val2 as u16}
                 Ok(Store) => {
                     let addr = val1;

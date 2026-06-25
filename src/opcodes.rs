@@ -41,4 +41,5 @@ define_opcodes! {
     JumpZero = 10 => "JZF",     // sym reg / reg = 0 -> pc = sym
     LoadImm     = 11 => "LDI",     // reg imm / reg = imm
     Store    = 12 => "STR",     // imm32 reg / mem[imm32] = reg
+    DTM     = 13 => "DTM",     // imm32a imm32b reg / mem start, start sector, sector count
 }
