@@ -120,10 +120,19 @@ impl Core{
                     self.running = false; break;
                 }
 
-                Ok(Add) => { self.regs[val1] = self.regs[val2] + self.regs[val3]; }
-                Ok(Sub) => { self.regs[val1] = self.regs[val2] - self.regs[val3]; }
-                Ok(Mul) => { self.regs[val1] = self.regs[val2] * self.regs[val3]; }
-                Ok(Div) => { self.regs[val1] = self.regs[val2] / self.regs[val3]; }
+                Ok(Add) => { self.regs[val1] = self.regs[val2].wrapping_add(self.regs[val3]); }
+                Ok(Sub) => { self.regs[val1] = self.regs[val2].wrapping_sub(self.regs[val3]); }
+                Ok(Mul) => { self.regs[val1] = self.regs[val2].wrapping_mul(self.regs[val3]); }
+
+                Ok(Div) => {
+                    if self.regs[val3] == 0 {
+                        println!("[CPU ERROR] Division by zero");
+                        self.running = false;
+                        break;
+                    }
+
+                    self.regs[val1] = self.regs[val2] / self.regs[val3];
+                }
 
                 Ok(SaveDisk) => { self.write_to_disk(val2, val3, val1 as u64)}
 
@@ -134,6 +143,16 @@ impl Core{
                     let high_byte = self.mem[addr + 1] as u16;
 
                     self.regs[val1] = low_byte | (high_byte << 8);
+
+                    println!(
+                        "[CPU] LDM ${} <- mem[{}..{}] = 0x{:02X} 0x{:02X} => 0x{:04X}",
+                        val1,
+                        addr,
+                        addr + 1,
+                        low_byte,
+                        high_byte,
+                        self.regs[val1]
+                    );
                 }
                 Ok(LoadImm) => {self.regs[val1] = val2 as u16}
                 Ok(Store) => {

@@ -2,8 +2,7 @@
 ; 513 should be 0xBB
 ; Otherwise kernel is missing
 
-.LDI $0 #0x600D
-.HLT
+; Load kernel from disk to memory and boot it
 
 .LDM $2 %512 ; Loads 512 and 513
 .LDI $3 #0xBB44 ; Expected kernel signature
