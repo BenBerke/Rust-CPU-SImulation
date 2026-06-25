@@ -152,8 +152,25 @@ fn compile_source(source_path: &str) -> Vec<u8> {
         let val2 = resolve_arg(arg2);
         let val3 = resolve_arg(arg3);
 
+
         let mut instr: u64 = 0;
         instr |= get_opcode_val(&*opcode) | (val1 << 16) | (val2 << 32) | (val3 << 48);
+
+        // --- DETAILED ASSEMBLER DEBUGGER ---
+        #[cfg(debug_assertions)]
+        {
+            println!(
+                "LINE {:03} | {:<6} -> RAW BINARY: [OP: 0x{:04X} | VAL1: 0x{:04X} | VAL2: 0x{:04X} | VAL3: 0x{:04X}] -> TOTAL: 0x{:016X}",
+                line.line_number,
+                opcode,
+                opcode_val,
+                val1,
+                val2,
+                val3,
+                instr
+            );
+        }
+
         compiled_bytes.extend_from_slice(&instr.to_le_bytes());
     }
 
