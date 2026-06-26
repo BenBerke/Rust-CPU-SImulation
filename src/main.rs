@@ -35,20 +35,22 @@ fn main() {
     ).expect("Failed to create window");
 
     let mut buffer = vec![0u32; SCREEN_WIDTH * SCREEN_HEIGHT];
+
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // Draw one white pixel at x=32, y=15
-        buffer[15 * SCREEN_WIDTH + 32] = 0xFFFFFF;
+        //buffer[15 * SCREEN_WIDTH + 32] = 0xFFFFFF;
 
         for _ in 0..50_000 {
-            if cpu.halted { break; }
+            if cpu.halted || !cpu.running { break; }
             cpu.step();
         }
 
         for i in 0..(SCREEN_WIDTH * SCREEN_HEIGHT) {
             let color_index = cpu.mem[VRAM_START + i];
-            buffer[i] = 0; //todo add a colour palette
+            buffer[i] = 1500; //todo add a colour palette
             //buffer[i] = lookup_palette(color_index);
         }
+
 
         window
             .update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT)

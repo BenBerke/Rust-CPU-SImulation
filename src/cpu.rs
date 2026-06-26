@@ -37,18 +37,33 @@ impl Core{
         u64::from_le_bytes(bytes)
     }
 
-    pub fn load_sector_from_disk(&mut self, sector_number: u64, ram_target_address: u64){
+    pub fn load_sector_from_disk(&mut self, sector_number: u64, ram_target_address: usize) -> bool{
+        let sector_size = SIZE_SECTOR as usize;
         let disk_offset = sector_number * SIZE_SECTOR;
 
-        println!("[HARDWARE] Disk Controller: Seeking to byte offset {}...", disk_offset);
-        self.disk_drive.seek(SeekFrom::Start(disk_offset));
+        if let Err(err) = self.disk_drive.seek(SeekFrom::Start(disk_offset)) {
+            println!("[HARDWARE] Seek failed: {}", err);
+            self.running = false;
+            return false;
+        }
 
-        println!("[HARDWARE] Disk Controller: Streaming 512 bytes into RAM at address {}...", ram_target_address);
-        let start = ram_target_address as usize;
+        println!("[HARDWARE] Disk Controller: Streaming {} bytes into Ram Adresss: {}", SIZE_SECTOR, ram_target_address);
+
+        let start = ram_target_address;
         let end = start + SIZE_SECTOR as usize;
 
-        let ram_slice= &mut self.mem[start..end];
-        self.disk_drive.read_exact(ram_slice).unwrap();
+        if let Err(err) = self.disk_drive.read_exact(&mut self.mem[start..end]) {
+            println!(
+                "[DISK ERROR] Failed to read sector {}. Disk image is probably too small or not padded to 512-byte sectors. Error: {}",
+                sector_number,
+                err
+            );
+
+            self.running = false;
+            return false;
+        }
+
+        true
     }
 
     pub fn write_raw_data(&mut self, sector: u64, data: &[u8]){
@@ -67,18 +82,23 @@ impl Core{
     }
 
     pub fn write_to_disk_large(&mut self, data: &[u8], start_sector: u64) {
-        let mut current_sector = start_sector;
-        for chunk in data.chunks(512) {
-            self.write_raw_data(current_sector, chunk);
-            current_sector += 1;
-        }
-        println!("[HARDWARE] Large write complete starting at sector {}", start_sector);
+        let disk_offset = start_sector * SIZE_SECTOR;
+
+        let mut buffer =[0u8;SIZE_SECTOR as usize];
+        let len = data.len().min(SIZE_SECTOR as usize);
+        buffer[..len].copy_from_slice(&data[..len]);
+
+        self.disk_drive.seek(SeekFrom::Start(disk_offset)).expect("Seek failed Write Large");
+        self.disk_drive.write_all(&buffer).expect("Write Large failed.");
     }
 
     pub fn launch_bios(&mut self, boot_sector:u64) -> bool {
         println!("[BIOS] Launching BIOS...");
 
-        self.load_sector_from_disk(boot_sector, 0);
+        if !self.load_sector_from_disk(boot_sector, 0){
+            println!("[BIOS] Failed to load boot sector");
+            return false;
+        }
 
         // Magic addresses to ensure bios is there
         let sig_low = self.mem[510];
@@ -105,7 +125,6 @@ impl Core{
     }
     pub fn step(&mut self) {
         use Opcode::*;
-        println!("[CPU] Starting execution loop at PC: 0x{:04X}...", self.pc);
 
         if !self.running || self.halted { return; }
 
@@ -160,16 +179,6 @@ impl Core{
                 let high_byte = self.mem[addr + 1] as u16;
 
                 self.regs[val1] = low_byte | (high_byte << 8);
-
-                println!(
-                    "[CPU] LDM ${} <- mem[{}..{}] = 0x{:02X} 0x{:02X} => 0x{:04X}",
-                    val1,
-                    addr,
-                    addr + 1,
-                    low_byte,
-                    high_byte,
-                    self.regs[val1]
-                );
             }
 
             Ok(DTM) => {
@@ -180,10 +189,11 @@ impl Core{
                 for i in 0..sector_count {
                     let current_sector = start_sector + i;
 
-                    if ram_dest + (SIZE_SECTOR as usize) <= SIZE_MEMORY as usize {
-                        self.load_sector_from_disk(current_sector, ram_dest as u64);
+                    if ram_dest + (SIZE_SECTOR as usize) <= SIZE_MEMORY {
+                        self.load_sector_from_disk(current_sector, ram_dest);
                         ram_dest += SIZE_SECTOR as usize;
-                    } else {
+                    }
+                    else {
                         println!("[CPU ERROR] DTM DMA target burst went out of RAM limits.");
                         self.running = false;
                         break;
