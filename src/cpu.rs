@@ -182,8 +182,8 @@ impl Core{
             }
 
             Ok(DTM) => {
-                let start_sector = val1 as u64;
-                let mut ram_dest = val2;
+                let mut ram_dest = val1;
+                let start_sector = val2 as u64;
                 let sector_count = val3 as u64;
 
                 for i in 0..sector_count {
