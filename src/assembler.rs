@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use cpu_simulation::opcodes::*;
-use cpu_simulation::constants::SIZE_SECTOR;
+use cpu_simulation::constants::{BOOTLOADER_BASE_ADDRESS, DATA_START, KERNEL_CODE_ADDRESS, SECTION_DATA, SECTION_TEXT, SIZE_SECTOR};
 use crate::Operand::{Imm32, Reg};
 
 #[derive(Debug, PartialEq)]
@@ -14,6 +14,7 @@ enum Operand{
     Imm32,
     Sym, // Labels
     PH, // Padding
+    Data,
 }
 
 struct SourceLine {
@@ -27,7 +28,8 @@ fn check_op_type(token: &str, t: Operand) -> bool {
         Operand::Imm => token.starts_with('#'),
         Operand::Imm32 => token.starts_with('%'),
         Operand::Sym => token.starts_with(':'),
-        Operand::PH => token.starts_with('@'),
+        Operand::PH => token.starts_with('|'),
+        Operand::Data => token.starts_with('!'),
     }
 }
 fn get_opcode_val(token: &str) -> u64 {
@@ -47,20 +49,24 @@ fn parse_number(clean: &str)->Result<u64, String>{
 }
 
 // Assume format: [Opcode (16bit) | Op1 (16bit) | Op2 (16bit) | Op3 (16bit)]
-fn compile_source(source_path: &str) -> Vec<u8> {
+fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize) -> Vec<u8> {
     use Operand::*;
 
     let source_code = fs::read_to_string(source_path).expect("Failed to read source file");
     let mut chars = source_code.chars().peekable();
 
     let mut symbol_table: HashMap<String, usize> = HashMap::new();
-    let mut current_offset = 0;
+    let mut current_offset = base_address;
+    let mut current_data_address = base_address + DATA_START;
 
     let mut compiled_bytes: Vec<u8> = Vec::new();
+    let mut data_bytes: Vec<u8> = Vec::new();
     let mut line_count: usize = 1;
 
     let mut program_lines: Vec<SourceLine> = Vec::new();
     let mut current_line_tokens = Vec::new();
+
+    let mut current_section = SECTION_TEXT.to_string();
 
     while chars.peek().is_some() {
         let c = *chars.peek().unwrap();
@@ -94,30 +100,73 @@ fn compile_source(source_path: &str) -> Vec<u8> {
     }
 
     // Catch any remaining tokens if the file didn't end with a newline
-    if !current_line_tokens.is_empty() {
-        program_lines.push(SourceLine {line_number: line_count, tokens: current_line_tokens});
-    }
+    if !current_line_tokens.is_empty() { program_lines.push(SourceLine {line_number: line_count, tokens: current_line_tokens}); }
 
     // PASS 1 (Symbol Table Generation)
     for line in &program_lines {
         let first_token = &line.tokens[0];
 
-        if first_token.starts_with(':') {
-            let label = first_token.trim_start_matches(':');
-            symbol_table.insert(label.to_string(), current_offset);
+        // clean_label is exactly first_token without the '@'
+        if let Some(label) = first_token.strip_prefix('@') { current_section = label.to_string(); continue; }
+
+        if current_section == SECTION_DATA{
+            if let Some(label) = first_token.strip_prefix('!') {
+                let data_type = &line.tokens[1];
+                symbol_table.insert(label.to_string(), current_data_address);
+
+                let allocation_size = match data_type.as_str() {
+                    "db" => 1,
+                    "dw" => 2,
+                    "dd" => 4,
+                    _=>1,
+                };
+
+                current_data_address += allocation_size;
+            }
+
+            continue;
         }
 
-        if get_opcode_val(first_token) != !0 { current_offset += 8; }
+        if current_section == SECTION_TEXT{
+            if let Some(label) = first_token.strip_prefix(':') { symbol_table.insert(label.to_string(), current_offset); }
+            if get_opcode_val(first_token) != !0 { current_offset += 8; }
+        }
     }
 
     let mut standard_compilation_success = true;
     // PASS 2 (Byte Compilation)
     // Does not execute logic. Turns the text file into an execute ready bytes and checks for bugs
     for mut line in program_lines {
-        // Pad the tokens vector so it ALWAYS has at least 4 elements (Opcode + 3 Args)
-        // Uuse "@0" as a placeholder literal
         if line.tokens.len() == 1 && line.tokens[0].starts_with(':') { continue; }
-        while line.tokens.len() < 4 { line.tokens.push("@0".to_string()); }
+
+        let first_token = &line.tokens[0];
+
+        if let Some(label) = first_token.strip_prefix('@') { current_section = label.to_string(); continue; }
+
+        if current_section == SECTION_DATA{
+            let name = first_token.strip_prefix('!').unwrap_or_else(|| panic!("Data must start with a '!' prefix. Line: {}", line.line_number));
+            let data_type = &line.tokens[1];
+            let data_val = &line.tokens[2];
+
+            let clean_val = parse_number(data_val.trim_start_matches(|c| c == '#' || c == '%')).unwrap_or_else(|_| {
+                panic!("[COMPILER ERROR] Invalid data value at line: {}", line.line_number)
+            });
+
+            match data_type.as_str() {
+                "db" => data_bytes.push(clean_val as u8),
+                "dw" => data_bytes.extend_from_slice(&(clean_val as u16).to_le_bytes()),
+                "dd" => data_bytes.extend_from_slice(&(clean_val as u32).to_le_bytes()),
+                _ => {}
+            }
+
+            continue;
+        }
+
+        // === TEXT ===
+
+        // Pad the tokens vector so it ALWAYS has at least 4 elements (Opcode + 3 Args)
+        // Uuse "|0" as a placeholder literal
+        while line.tokens.len() < 4 { line.tokens.push("|0".to_string()); }
 
         let opcode = &line.tokens[0];
         let opcode_val = get_opcode_val(opcode);
@@ -143,7 +192,7 @@ fn compile_source(source_path: &str) -> Vec<u8> {
             Ok(Add) | Ok(Sub) | Ok(Mul) | Ok(Div) | Ok(SaveDisk) => {
                 check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg)
             },
-            Ok(LoadMem) => check_op_type(arg1, Reg) && check_op_type(arg2, Imm32),
+            Ok(LoadMem) => check_op_type(arg1, Reg) && (check_op_type(arg2, Imm32) || check_op_type(arg2, Data)),
             Ok(Jmp) => symbol_table.contains_key(arg1.trim_start_matches(':')) || check_op_type(arg1, Imm),
             Ok(JmpAbs) => check_op_type(arg1, Imm32),
             Ok(JumpZero) => check_op_type(arg1, Sym) && check_op_type(arg2, Reg),
@@ -159,7 +208,8 @@ fn compile_source(source_path: &str) -> Vec<u8> {
         }
 
         let resolve_arg = |token: &str| -> Result<u64, String> {
-            let clean_token = token.trim_start_matches(|c| c == '$' || c == '#' || c == ':' || c == '@' || c == '%');
+            let clean_token = token.trim_start_matches
+            (|c| c == '$' || c == '#' || c == ':' || c == '@' || c == '%' || c == ':' || c == '|' || c == '!');
 
             if let Some(&address) = symbol_table.get(clean_token) { Ok(address as u64) }
             else { parse_number(clean_token) }
@@ -239,11 +289,18 @@ fn compile_source(source_path: &str) -> Vec<u8> {
     }
 
     if !standard_compilation_success { compiled_bytes.clear(); std::process::exit(1);}
+    if use_data_layout {
+        while compiled_bytes.len() < DATA_START {
+            compiled_bytes.push(0);
+        }
+
+        compiled_bytes.extend(data_bytes);
+    }
     compiled_bytes
 }
 
-fn assemble_to_disk(source_path: String, disk_file: &mut File, sector_number: u64) {
-    let mut bytes = compile_source(&source_path);
+fn assemble_bootloader(source_path: String, disk_file: &mut File, sector_number: u64) {
+    let mut bytes = compile_source(&source_path, false, BOOTLOADER_BASE_ADDRESS);
 
     if bytes.len() > (SIZE_SECTOR - 2) as usize { panic!("File too large!");  }
     while bytes.len() < (SIZE_SECTOR - 2) as usize { bytes.push(0); }
@@ -257,8 +314,8 @@ fn assemble_to_disk(source_path: String, disk_file: &mut File, sector_number: u6
     disk_file.write_all(&bytes).expect("Write failed");
 }
 
-fn assemble_to_disk_multisector(source_path: String, disk_file: &mut File, start_sector: u64){
-    let raw_code_bytes = compile_source(&source_path);
+fn assemble_kernel(source_path: String, disk_file: &mut File, start_sector: u64){
+    let raw_code_bytes = compile_source(&source_path, true, KERNEL_CODE_ADDRESS);
     let mut bytes = Vec::new();
 
     // Bytes 512 & 513: Magic Kernel Signature
@@ -299,14 +356,14 @@ fn main(){
         .expect("Couldn't open disk file");
 
     // 1. Assemble the Bootloader into Sector 0
-    assemble_to_disk(
+    assemble_bootloader(
         root_dir.join("os").join("boot_loader").to_string_lossy().into_owned(),
         &mut disk_file,
         0
     );
 
     // 2. Assemble the Kernel starting from Sector 1
-    assemble_to_disk_multisector(
+    assemble_kernel(
         root_dir.join("os").join("kernel").to_string_lossy().into_owned(),
         &mut disk_file,
         1

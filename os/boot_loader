@@ -21,5 +21,5 @@
 .LDM $1 %514 ; Sector Count
 .DTM %512 %1 $1 ; Reload the full kernel
 .JAB %516
-.LDI $0 #15
+.LDI $0 #0xFFFF
 .HLT

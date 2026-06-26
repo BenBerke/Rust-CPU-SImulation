@@ -1,4 +1,8 @@
 ; Kernel
 
-.LDI $0 #0
+@data
+!test_value db 18
+
+@text
+.LDM $0 !test_value
 .HLT

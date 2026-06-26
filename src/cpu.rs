@@ -38,7 +38,6 @@ impl Core{
     }
 
     pub fn load_sector_from_disk(&mut self, sector_number: u64, ram_target_address: usize) -> bool{
-        let sector_size = SIZE_SECTOR as usize;
         let disk_offset = sector_number * SIZE_SECTOR;
 
         if let Err(err) = self.disk_drive.seek(SeekFrom::Start(disk_offset)) {
@@ -139,6 +138,7 @@ impl Core{
         let val1 = ((instr >> 16) & 0xFFFF) as usize;
         let val2 = ((instr >> 32) & 0xFFFF) as usize;
         let val3 = ((instr >> 48) & 0xFFFF) as usize;
+
         match Opcode::try_from(opcode) {
             Ok(Halt) => {
                 let exit_code = self.regs[0];
@@ -167,10 +167,10 @@ impl Core{
             Ok(SaveDisk) => { self.write_to_disk(val2, val3, val1 as u64)}
 
             Ok(LoadMem) => {
-                let addr = val2;
+                let addr = ((instr >> 32) & 0xFFFFFFFF) as usize;
 
                 if addr + 1 >= SIZE_MEMORY {
-                    println!("[CPU ERROR] LoadMem out of bounds");
+                    println!("[CPU ERROR] LoadMem out of bounds: 0x{:X}", addr);
                     self.running = false;
                     return;
                 }
@@ -184,7 +184,7 @@ impl Core{
             Ok(DTM) => {
                 let mut ram_dest = val1;
                 let start_sector = val2 as u64;
-                let sector_count = val3 as u64;
+                let sector_count = self.regs[val3] as u64;
 
                 for i in 0..sector_count {
                     let current_sector = start_sector + i;
@@ -203,8 +203,8 @@ impl Core{
 
             Ok(LoadImm) => {self.regs[val1] = val2 as u16}
             Ok(Store) => {
-                let addr = val1;
-                let register_value = self.regs[val2];
+                let addr = (val1 << 16) | val2;
+                let register_value = self.regs[val3];
 
                 self.write_byte(addr, (register_value & 0xFF) as u8);
                 self.write_byte(addr + 1, ((register_value >> 8) & 0xFF) as u8);
