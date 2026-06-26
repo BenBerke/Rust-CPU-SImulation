@@ -5,6 +5,8 @@ pub const REG_COUNT: u8 = 8;
 // Display Config (320x240 Indexed Palette)
 pub const SCREEN_WIDTH: usize = 320;
 pub const SCREEN_HEIGHT: usize = 240;
+pub const SCREEN_VIRTUAL_WIDTH: usize = SCREEN_WIDTH * 3;
+pub const SCREEN_VIRTUAL_HEIGHT: usize = SCREEN_HEIGHT * 3;
 pub const VRAM_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT; // 76,800 Bytes (~75KB)
 
 // =========================================================================

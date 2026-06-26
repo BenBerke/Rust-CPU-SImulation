@@ -2,13 +2,15 @@ mod opcodes;
 mod cpu;
 mod constants;
 
+mod screen;
+
 use cpu::Core;
 use std::fs::File;
 use std::path::PathBuf;
 
-use minifb::{Key, Window, WindowOptions};
+use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
 use cpu_simulation::constants::VRAM_START;
-use crate::constants::{SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::constants::{SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_VIRTUAL_HEIGHT, SCREEN_VIRTUAL_WIDTH};
 
 fn main() {
     let root_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -29,9 +31,13 @@ fn main() {
 
     let mut window = Window::new(
         "Tilky OS",
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
-        WindowOptions::default(),
+        SCREEN_VIRTUAL_WIDTH,
+        SCREEN_VIRTUAL_HEIGHT,
+        WindowOptions {
+            scale_mode: ScaleMode::AspectRatioStretch,
+            scale: Scale::X1,
+            ..WindowOptions::default()
+        },
     ).expect("Failed to create window");
 
     let mut buffer = vec![0u32; SCREEN_WIDTH * SCREEN_HEIGHT];
@@ -46,14 +52,20 @@ fn main() {
         }
 
         for i in 0..(SCREEN_WIDTH * SCREEN_HEIGHT) {
-            let color_index = cpu.mem[VRAM_START + i];
-            buffer[i] = 1500; //todo add a colour palette
-            //buffer[i] = lookup_palette(color_index);
+            cpu.mem[VRAM_START + i] = i as u8 % 16;
+        }
+
+        for i in 0..(SCREEN_WIDTH * SCREEN_HEIGHT) {
+            let pixel_byte = cpu.mem[VRAM_START + i];
+            let color_index = pixel_byte & 0x0F;
+
+            //todo do something with the upper 4 bit metadata
+
+            let final_color = screen::lookup_palette(color_index as usize);
+            buffer[i] = final_color;
         }
 
 
-        window
-            .update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT)
-            .expect("Failed to update window");
+        window.update_with_buffer(&buffer, SCREEN_WIDTH, SCREEN_HEIGHT).expect("Failed to update window");
     }
 }
