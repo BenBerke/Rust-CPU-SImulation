@@ -7,7 +7,6 @@ pub const SCREEN_WIDTH: usize = 320;
 pub const SCREEN_HEIGHT: usize = 240;
 pub const SCREEN_VIRTUAL_WIDTH: usize = SCREEN_WIDTH * 3;
 pub const SCREEN_VIRTUAL_HEIGHT: usize = SCREEN_HEIGHT * 3;
-pub const VRAM_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT; // 76,800 Bytes (~75KB)
 
 // =========================================================================
 // MEMORY LAYOUT SEGMENTS (HEX ENCODED)
@@ -24,8 +23,12 @@ pub const DATA_END: usize = 0x3FFFF;
 // Bank 2: Memory-Mapped I/O & Graphics (128 KB)
 pub const MMIO_START: usize = 0x40000;
 pub const VRAM_START: usize = 0x40000; // VRAM sits at the base of MMIO
+
+pub const VRAM_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT; // 76,800 Bytes (~75KB)
 pub const VRAM_END: usize = VRAM_START + VRAM_SIZE; // Ends at 0x52C00
 pub const MMIO_END: usize = 0x5FFFF; // Remaining ~51KB for audio/input/palettes
+pub const IO_INPUT_START: usize = VRAM_END; // 0x52C00
+pub const IO_INPUT_SIZE: usize = 128;
 
 // Bank 3: User Space Heap / Graphics Backbuffer (112 KB)
 pub const USER_START: usize = 0x60000;

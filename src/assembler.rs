@@ -5,7 +5,6 @@ use std::io::{Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use cpu_simulation::opcodes::*;
 use cpu_simulation::constants::{BOOTLOADER_BASE_ADDRESS, DATA_START, KERNEL_CODE_ADDRESS, SECTION_DATA, SECTION_TEXT, SIZE_SECTOR};
-use crate::Operand::{Imm32, Reg};
 
 #[derive(Debug, PartialEq)]
 enum Operand{
@@ -118,6 +117,7 @@ fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize)
                     "db" => 1,
                     "dw" => 2,
                     "dd" => 4,
+                    "dq" => 8,
                     _=>1,
                 };
 
@@ -144,7 +144,6 @@ fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize)
         if let Some(label) = first_token.strip_prefix('@') { current_section = label.to_string(); continue; }
 
         if current_section == SECTION_DATA{
-            let name = first_token.strip_prefix('!').unwrap_or_else(|| panic!("Data must start with a '!' prefix. Line: {}", line.line_number));
             let data_type = &line.tokens[1];
             let data_val = &line.tokens[2];
 
@@ -156,6 +155,7 @@ fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize)
                 "db" => data_bytes.push(clean_val as u8),
                 "dw" => data_bytes.extend_from_slice(&(clean_val as u16).to_le_bytes()),
                 "dd" => data_bytes.extend_from_slice(&(clean_val as u32).to_le_bytes()),
+                "dq" => data_bytes.extend_from_slice(&(clean_val as u64).to_le_bytes()),
                 _ => {}
             }
 
@@ -165,7 +165,7 @@ fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize)
         // === TEXT ===
 
         // Pad the tokens vector so it ALWAYS has at least 4 elements (Opcode + 3 Args)
-        // Uuse "|0" as a placeholder literal
+        // Use "|0" as a placeholder literal
         while line.tokens.len() < 4 { line.tokens.push("|0".to_string()); }
 
         let opcode = &line.tokens[0];
@@ -188,15 +188,15 @@ fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize)
 
         let is_valid = match Opcode::try_from(opcode_val as u16) {
             Ok(Halt) => true,
-            Ok(LoadImm) => check_op_type(arg1, Reg) && check_op_type(arg2, Imm),
+            Ok(LoadImm) => check_op_type(arg1, Reg) && (check_op_type(arg2, Imm) || check_op_type(arg2, Data)),
             Ok(Add) | Ok(Sub) | Ok(Mul) | Ok(Div) | Ok(SaveDisk) => {
                 check_op_type(arg1, Reg) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg)
             },
-            Ok(LoadMem) => check_op_type(arg1, Reg) && (check_op_type(arg2, Imm32) || check_op_type(arg2, Data)),
+            Ok(LD8) | Ok(LD16) | Ok(LD64) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) },
+            Ok(ST8) | Ok(ST16) | Ok(ST64) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) },
             Ok(Jmp) => symbol_table.contains_key(arg1.trim_start_matches(':')) || check_op_type(arg1, Imm),
             Ok(JmpAbs) => check_op_type(arg1, Imm32),
             Ok(JumpZero) => check_op_type(arg1, Sym) && check_op_type(arg2, Reg),
-            Ok(Store) => check_op_type(arg1, Imm32) && check_op_type(arg2, Reg),
             Ok(DTM) => check_op_type(arg1, Imm32) && check_op_type(arg2, Imm32) && check_op_type(arg3, Reg),
             Err(_) => false,
         };
@@ -215,7 +215,7 @@ fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize)
             else { parse_number(clean_token) }
         };
 
-        let mut val1 = match resolve_arg(arg1) {
+        let val1 = match resolve_arg(arg1) {
             Ok(v) => v,
             Err(e) => {
                 println!(
@@ -229,7 +229,7 @@ fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize)
             }
         };
 
-        let mut val2 = match resolve_arg(arg2) {
+        let val2 = match resolve_arg(arg2) {
             Ok(v) => v,
             Err(e) => {
                 println!(
@@ -243,7 +243,7 @@ fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize)
             }
         };
 
-        let mut val3 = match resolve_arg(arg3) {
+        let val3 = match resolve_arg(arg3) {
             Ok(v) => v,
             Err(e) => {
                 println!(
@@ -257,18 +257,24 @@ fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize)
             }
         };
 
-        // Special case for some instruction where first number is 32 bit.
-        let mut instr: u64 = 0;
-        if let Ok(Opcode::Store) = Opcode::try_from(opcode_val as u16) {
-            let full_address = val1; // Hold the 32-bit address (1)
-            let reg_source = val2;   // Hold the register index (1)
+        let instr: u64 = match Opcode::try_from(opcode_val as u16) {
+            Ok(Opcode::LoadImm) =>{
+                // LDI layout:
+                // opcode: 16 bits
+                // val1:   destination register
+                // val2:   immediate high 16 bits
+                // val3:   immediate low 16 bits
 
-            val1 = (full_address >> 16) & 0xFFFF;
-            val2 = full_address & 0xFFFF;
-            val3 = reg_source;
+                let dest_reg = val1;
+                let imm32 = val2;
 
-            instr = opcode_val | (val1 << 16) | (val2 << 32) | (val3 << 48);
-        } else { instr |= opcode_val | (val1 << 16) | (val2 << 32) | (val3 << 48); }
+                let imm_hi = (imm32 >> 16) & 0xFFFF;
+                let imm_lo = imm32 & 0xFFFF;
+
+                opcode_val | ((dest_reg & 0xFFFF) << 16) | (imm_hi << 32) | (imm_lo << 48)
+            }
+            _=> { opcode_val | ((val1 & 0xFFFF) << 16) | ((val2 & 0xFFFF) << 32) | ((val3 & 0xFFFF) << 48) }
+        };
 
         // --- DETAILED ASSEMBLER DEBUGGER ---
         #[cfg(debug_assertions)]

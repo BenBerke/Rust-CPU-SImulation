@@ -31,7 +31,7 @@ macro_rules! define_opcodes {
 define_opcodes! {
     Halt     = 0 => "HLT",      // Halts execution
     Add      = 2 => "ADD",      // reg1 reg2 reg3 / reg1 = reg2 + reg3
-    LoadMem    = 3 => "LDM",      // reg imm32  / reg = memory[imm32]
+
     Jmp      = 4 => "JSM",      // sym / pc = sym
     SaveDisk = 5 => "SDK",      // reg1 reg2 reg3 / drive[reg1] = memory[reg2..reg3]
     Sub      = 6 => "SUB",      // reg1 reg2 reg3 / reg1 = reg2 + reg3
@@ -40,6 +40,12 @@ define_opcodes! {
     JmpAbs   = 9 => "JAB",      // imm32 / pc = imm32
     JumpZero = 10 => "JZF",     // sym reg / reg = 0 -> pc = sym
     LoadImm     = 11 => "LDI",     // reg imm / reg = imm
-    Store    = 12 => "STR",     // imm32 reg / mem[imm32] = reg
+
     DTM     = 13 => "DTM",     // imm32a imm32b reg / mem start, start sector, sector count
+    LD8 = 14 => "LDB", // reg reg / Load byte from memory
+    LD16  = 15 => "LDW", // reg reg / Load word from memory
+    LD64  = 16 => "LDQ", // reg reg / Load qword from memory
+    ST8  = 17 => "STB", // reg reg / mem[addr_reg] = low 8 bits of value_reg
+    ST16 = 18 => "STW", // reg reg / mem[addr_reg..addr_reg+2] = low 16 bits
+    ST64 = 19 => "STQ", // reg reg / mem[addr_reg..addr_reg+8] = full 64 bits
 }

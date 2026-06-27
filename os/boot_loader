@@ -10,16 +10,22 @@
 .DTM %512 %1 $1 ; Pull Sector 1 from disk into RAM addresses 512-1024
 
 ; === Validate Kernel ===
-.LDM $1 %512
+.LDI $0 #512
+.LDW $1 $0
 .LDI $2 #0xBB44
 .SUB $1 $1 $2
 .JZF :boot_kernel $1
+
+; == Kernel Missing ==
 .LDI $0 #0xDEAD
 .HLT
 
 :boot_kernel
-.LDM $1 %514 ; Sector Count
+.LDI $0 #514 ; Sector Count
+.LDW $1 $0
 .DTM %512 %1 $1 ; Reload the full kernel
 .JAB %516
+
+; == Fail Safe ==
 .LDI $0 #0xFFFF
 .HLT

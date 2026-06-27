@@ -1,11 +1,11 @@
 use std::fs::File;
+use std::future::pending;
 use std::io::{Read, Seek, SeekFrom, Write};
-use cpu_simulation::opcodes::Opcode::{Add, Div, Halt, Jmp, JmpAbs, JumpZero, LoadImm, LoadMem, Mul, SaveDisk, Store, Sub, DTM};
 use crate::opcodes::*;
 use crate::constants::*;
 
 pub struct Core{
-    regs: [u16; REG_COUNT as usize], // reg0 = eax
+    regs: [u64; REG_COUNT as usize], // reg0 = return & sys call reg
     pub(crate) mem: [u8;SIZE_MEMORY as usize], // Main memory
     disk_drive: File,
 
@@ -166,25 +166,77 @@ impl Core{
 
             Ok(SaveDisk) => { self.write_to_disk(val2, val3, val1 as u64)}
 
-            Ok(LoadMem) => {
-                let addr = ((instr >> 32) & 0xFFFFFFFF) as usize;
+            Ok(LD8) => {
+                let dest_reg = val1;
+                let src_reg = val2;
 
-                if addr + 1 >= SIZE_MEMORY {
-                    println!("[CPU ERROR] LoadMem out of bounds: 0x{:X}", addr);
+                if dest_reg >= self.regs.len() || src_reg >= self.regs.len() {
+                    println!("[CPU ERROR] Invalid register in LDB.");
                     self.running = false;
                     return;
                 }
 
-                let low_byte = self.mem[addr] as u16;
-                let high_byte = self.mem[addr + 1] as u16;
+                let addr = self.regs[src_reg] as usize;
 
-                self.regs[val1] = low_byte | (high_byte << 8);
+                if addr >= SIZE_MEMORY {
+                    println!("[CPU ERROR] LDB out of bounds: 0x{:X}", addr);
+                    self.running = false;
+                    return;
+                }
+
+                self.regs[dest_reg] = self.mem[addr] as u64;
             }
 
-            Ok(DTM) => {
+            Ok(LD16) => {
+                let dest_reg = val1;
+                let src_reg = val2;
+
+                if dest_reg >= self.regs.len() || src_reg >= self.regs.len() {
+                    println!("[CPU ERROR] Invalid register in LDW.");
+                    self.running = false;
+                    return;
+                }
+
+                let addr = self.regs[src_reg] as usize;
+
+                if addr + 2 > SIZE_MEMORY {
+                    println!("[CPU ERROR] LDW out of bounds: 0x{:X}", addr);
+                    self.running = false;
+                    return;
+                }
+
+                let low = self.mem[addr] as u64;
+                let high = self.mem[addr + 1] as u64;
+
+                self.regs[dest_reg] = low | (high << 8);
+            }
+
+            Ok(LD64) => {
+                let dest_reg = val1;
+                let src_reg = val2;
+
+                if dest_reg >= self.regs.len() || src_reg >= self.regs.len() {
+                    println!("[CPU ERROR] Invalid register in LDQ.");
+                    self.running = false;
+                    return;
+                }
+
+                let addr = self.regs[src_reg] as usize;
+
+                if addr + 8 > SIZE_MEMORY {
+                    println!("[CPU ERROR] LDQ out of bounds: 0x{:X}", addr);
+                    self.running = false;
+                    return;
+                }
+
+                let bytes = &self.mem[addr..addr + 8];
+                self.regs[dest_reg] = u64::from_le_bytes(bytes.try_into().unwrap());
+            }
+
+            Ok(DTM) => { // Disk to Memory
                 let mut ram_dest = val1;
                 let start_sector = val2 as u64;
-                let sector_count = self.regs[val3] as u64;
+                let sector_count = self.regs[val3];
 
                 for i in 0..sector_count {
                     let current_sector = start_sector + i;
@@ -201,13 +253,64 @@ impl Core{
                 }
             }
 
-            Ok(LoadImm) => {self.regs[val1] = val2 as u16}
-            Ok(Store) => {
-                let addr = (val1 << 16) | val2;
-                let register_value = self.regs[val3];
+            Ok(LoadImm) => {
+                let dest_reg = val1;
 
-                self.write_byte(addr, (register_value & 0xFF) as u8);
-                self.write_byte(addr + 1, ((register_value >> 8) & 0xFF) as u8);
+                if dest_reg >= self.regs.len() {
+                    println!("[CPU ERROR] Invalid register in LDI.");
+                    self.running = false;
+                    return;
+                }
+
+                let imm32 = ((val2 as u64) << 16) | (val3 as u64);
+                self.regs[dest_reg] = imm32;
+            }
+
+            Ok(ST8) => {
+                let addr_reg = val1;
+                let src_reg = val2;
+
+                if addr_reg >= self.regs.len() || src_reg >= self.regs.len() {
+                    println!("[CPU ERROR] Invalid register in STB.");
+                    self.running = false;
+                    return;
+                }
+
+                let addr = self.regs[addr_reg] as usize;
+                let value = self.regs[src_reg];
+
+                self.write_byte(addr, (value & 0xFF) as u8);
+            }
+            Ok(ST16) => {
+                let addr_reg = val1;
+                let src_reg = val2;
+
+                if addr_reg >= self.regs.len() || src_reg >= self.regs.len() {
+                    println!("[CPU ERROR] Invalid register in STB.");
+                    self.running = false;
+                    return;
+                }
+
+                let addr = self.regs[addr_reg] as usize;
+                let value = self.regs[src_reg];
+
+                self.write_byte(addr, (value & 0xFF) as u8);
+                self.write_byte(addr + 1, ((value >> 8) & 0xFF) as u8);
+            }
+            Ok(ST64) => {
+                let addr_reg = val1;
+                let src_reg = val2;
+
+                if addr_reg >= self.regs.len() || src_reg >= self.regs.len() {
+                    println!("[CPU ERROR] Invalid register in STB.");
+                    self.running = false;
+                    return;
+                }
+
+                let addr = self.regs[addr_reg] as usize;
+                let value = self.regs[src_reg];
+
+                for i in 0..8{ self.write_byte(addr + i, ((value >> (i * 8)) & 0xFF) as u8); }
             }
 
             Ok(Jmp) => {self.pc = val1 }

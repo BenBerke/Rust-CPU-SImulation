@@ -1,8 +1,22 @@
 ; Kernel
+; IO Start = 0x52C00
 
 @data
-!test_value db 18
+!io_start dq #0x52C00 ; Pointer to Input MMIO Start
+!keycode_A db #0x41 ; Pointer to ASCII A offset
 
 @text
-.LDM $0 !test_value
+.LDI $0 !io_start ; &io_start
+.LDQ $0 $0 ; $0 = 0x52C00
+
+.LDI $1 !keycode_A
+.LDB $1 $1 ; $1 = 0x41
+
+.ADD $0 $0 $1 ; $0 = Pointer to State of A
+
+:wait
+.LDB $1 $0
+.JZF :wait $1
+
+.LDI $0 #1
 .HLT
