@@ -2,12 +2,7 @@ use std::fs::File;
 
 use minifb::Window;
 
-use crate::constants::{
-    SCREEN_HEIGHT,
-    SCREEN_WIDTH,
-    VRAM_SIZE,
-    VRAM_START,
-};
+use crate::constants::{CYCLES_PER_FRAME, SCREEN_HEIGHT, SCREEN_WIDTH, VRAM_SIZE, VRAM_START};
 
 use crate::hardware::bus::Bus;
 use crate::hardware::cpu::Core;
@@ -19,7 +14,6 @@ pub struct Motherboard {
     pub bus: Bus,
 
     pub framebuffer: Vec<u32>,
-    pub cycles_per_frame: usize,
 }
 
 impl Motherboard {
@@ -29,7 +23,6 @@ impl Motherboard {
             bus: Bus::new(disk_drive),
 
             framebuffer: vec![0; SCREEN_WIDTH * SCREEN_HEIGHT],
-            cycles_per_frame: 50_000,
         }
     }
 
@@ -64,10 +57,8 @@ impl Motherboard {
     pub fn handle_input(&mut self, window: &Window) { handle_input(&mut self.bus, window); }
 
     pub fn step_frame(&mut self) {
-        for _ in 0..self.cycles_per_frame {
-            if self.cpu.halted || !self.cpu.running {
-                break;
-            }
+        for _ in 0..CYCLES_PER_FRAME {
+            if self.cpu.halted || !self.cpu.running { break; }
 
             self.cpu.step(&mut self.bus);
         }

@@ -26,11 +26,7 @@ fn main() {
         "Tilky VM",
         SCREEN_VIRTUAL_WIDTH,
         SCREEN_VIRTUAL_HEIGHT,
-        WindowOptions {
-            scale_mode: ScaleMode::AspectRatioStretch,
-            scale: Scale::X1,
-            ..WindowOptions::default()
-        },
+        WindowOptions { scale_mode: ScaleMode::AspectRatioStretch, scale: Scale::X1, ..WindowOptions::default() },
     ).expect("Failed to create window");
 
     while window.is_open() && !window.is_key_down(Key::Escape)  && motherboard.is_alive() {

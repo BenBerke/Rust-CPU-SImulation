@@ -46,8 +46,11 @@ pub const BOOTLOADER_BASE_ADDRESS: usize = 0;
 pub const KERNEL_LOAD_ADDRESS: usize = SIZE_SECTOR as usize; // 512
 pub const KERNEL_HEADER_SIZE: usize = 4;
 pub const KERNEL_CODE_ADDRESS: usize = KERNEL_LOAD_ADDRESS + KERNEL_HEADER_SIZE; // 516
+pub const CYCLES_PER_FRAME: usize = 50_000;
+pub const IO_TIMER_START: usize = 0x52D00;
+pub const IO_TIMER_SIZE: usize = 8;
 
 // ==========================
 // Interrupt Mask
 // ==========================
-pub const INT_MASK: u8 = 1;
+pub const INT_MASK_TIMER: u8 = 1;
