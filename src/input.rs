@@ -1,8 +1,8 @@
 use crate::constants::{IO_INPUT_SIZE, IO_INPUT_START};
-use crate::hardware::cpu::Core;
+use crate::hardware::bus::Bus;
 use minifb::{Key, Window};
 
-pub fn handle_input(cpu: &mut Core, window: &Window) {
+pub fn handle_input(bus: &mut Bus, window: &Window) {
     let tracked_keys = [
         // Letters (A-Z)
         (Key::A, 0x41), (Key::B, 0x42), (Key::C, 0x43), (Key::D, 0x44), (Key::E, 0x45),
@@ -20,10 +20,10 @@ pub fn handle_input(cpu: &mut Core, window: &Window) {
     ];
 
     for (key, offset) in tracked_keys.iter() {
-        let is_down = window.is_key_down(*key);
-
         let mem_addr = IO_INPUT_START + (*offset as usize);
-        if mem_addr >= IO_INPUT_START + IO_INPUT_SIZE { panic!("[INPUT] Segfault. Input is beyond the Input MMIO Section"); }
-        cpu.write_byte(mem_addr,if is_down { 1 } else { 0 } );
+
+        if mem_addr >= IO_INPUT_START + IO_INPUT_SIZE { panic!("[INPUT] Segfault. Input is beyond the Input MMIO section"); }
+
+        bus.mem[mem_addr] = if window.is_key_down(*key) { 1 } else { 0 };
     }
 }
