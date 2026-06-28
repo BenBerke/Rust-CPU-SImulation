@@ -5,18 +5,20 @@ use crate::opcodes::*;
 use crate::constants::*;
 
 pub struct Core{
-    regs: [u64; REG_COUNT as usize], // reg0 = return & sys call reg
-    pub(crate) mem: [u8;SIZE_MEMORY as usize], // Main memory
-    disk_drive: File,
+    pub regs: [u64; REG_COUNT as usize], // reg0 = return & sys call reg
+    pub mem: [u8;SIZE_MEMORY as usize], // Main memory
+    pub disk_drive: File,
 
-    pc: usize, // Program Counter (points to current instruction)
-    pub(crate) running: bool,
-    pub(crate) halted: bool
+    pub pc: usize, // Program Counter (points to current instruction)
+    pub running: bool,
+    pub halted: bool,
+
+    iro: u32
 }
 
 impl Core{
     pub fn new(disk_file: File) -> Box<Core>
-    { Box::new(Core { regs: [0;REG_COUNT as usize], mem:[0;SIZE_MEMORY as usize], disk_drive: disk_file, pc: 0, running: false, halted: false }) }
+    { Box::new(Core { regs: [0;REG_COUNT as usize], mem:[0;SIZE_MEMORY as usize], disk_drive: disk_file, pc: 0, running: false, halted: false, iro: 0 }) }
 
     pub fn consume_byte(&mut self) -> u8 {
         let byte = self.mem[self.pc];
@@ -126,6 +128,10 @@ impl Core{
         use Opcode::*;
 
         if !self.running || self.halted { return; }
+
+        if self.iro != 0 {
+
+        }
 
         if INSTR_START > self.pc || self.pc >= INSTR_END {
             println!("[CPU] Segfault. PC (0x{:04X}) attempted to execute non-code memory.", self.pc);

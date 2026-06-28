@@ -34,7 +34,7 @@ pub const IO_INPUT_SIZE: usize = 128;
 pub const USER_START: usize = 0x60000;
 pub const USER_END: usize = 0x7BFFF;
 
-// Hardware Stack Region (16 KB)
+// hardware Stack Region (16 KB)
 // The stack pointer (SP) will start at 0x7FFFF and grow DOWNWARDS
 pub const STACK_START: usize = 0x7C000;
 pub const STACK_END: usize = 0x7FFFF;
@@ -46,3 +46,8 @@ pub const BOOTLOADER_BASE_ADDRESS: usize = 0;
 pub const KERNEL_LOAD_ADDRESS: usize = SIZE_SECTOR as usize; // 512
 pub const KERNEL_HEADER_SIZE: usize = 4;
 pub const KERNEL_CODE_ADDRESS: usize = KERNEL_LOAD_ADDRESS + KERNEL_HEADER_SIZE; // 516
+
+// ==========================
+// Interrupt Mask
+// ==========================
+pub const INT_MASK: u8 = 1;

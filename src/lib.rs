@@ -1,6 +1,4 @@
-pub mod opcodes;
 pub mod constants;
-mod screen;
-mod input;
-
-pub mod cpu;
+pub mod hardware;
+pub mod input;
+pub mod opcodes;

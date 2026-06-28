@@ -1,5 +1,5 @@
 use crate::constants::{IO_INPUT_SIZE, IO_INPUT_START};
-use crate::cpu::Core;
+use crate::hardware::cpu::Core;
 use minifb::{Key, Window};
 
 pub fn handle_input(cpu: &mut Core, window: &Window) {
@@ -23,7 +23,7 @@ pub fn handle_input(cpu: &mut Core, window: &Window) {
         let is_down = window.is_key_down(*key);
 
         let mem_addr = IO_INPUT_START + (*offset as usize);
-        if mem_addr > IO_INPUT_START + IO_INPUT_SIZE { panic!("[INPUT] Segfault. Input is beyond the Input MMIO Section"); }
+        if mem_addr >= IO_INPUT_START + IO_INPUT_SIZE { panic!("[INPUT] Segfault. Input is beyond the Input MMIO Section"); }
         cpu.write_byte(mem_addr,if is_down { 1 } else { 0 } );
     }
 }

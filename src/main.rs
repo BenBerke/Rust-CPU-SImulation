@@ -1,17 +1,19 @@
-mod opcodes;
-mod cpu;
-mod constants;
-mod screen;
-mod input;
-
-use cpu::Core;
 use std::fs::File;
 use std::path::PathBuf;
 
 use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
-use cpu_simulation::constants::VRAM_START;
-use crate::constants::{SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_VIRTUAL_HEIGHT, SCREEN_VIRTUAL_WIDTH};
-use crate::input::handle_input;
+
+use cpu_simulation::constants::{
+    SCREEN_HEIGHT,
+    SCREEN_WIDTH,
+    SCREEN_VIRTUAL_HEIGHT,
+    SCREEN_VIRTUAL_WIDTH,
+    VRAM_START,
+};
+
+use cpu_simulation::hardware::cpu::Core;
+use cpu_simulation::hardware::screen;
+use cpu_simulation::input::handle_input;
 
 fn main() {
     let root_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -43,7 +45,7 @@ fn main() {
 
     let mut buffer = vec![0u32; SCREEN_WIDTH * SCREEN_HEIGHT];
 
-    while window.is_open() && !window.is_key_down(Key::Escape)  && cpu.running && !cpu.halted{
+    while window.is_open() && !window.is_key_down(Key::Escape)  && cpu.running && !cpu.halted {
         // Draw one white pixel at x=32, y=15
         //buffer[15 * SCREEN_WIDTH + 32] = 0xFFFFFF;
 
