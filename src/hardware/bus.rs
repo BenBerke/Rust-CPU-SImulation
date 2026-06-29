@@ -3,6 +3,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::constants::*;
 use crate::hardware::timer::Timer;
+use std::time::Duration;
 
 pub struct Bus {
     pub mem: [u8; SIZE_MEMORY as usize],
@@ -15,12 +16,8 @@ impl Bus {
         Self {
             mem: [0; SIZE_MEMORY as usize],
             disk_drive,
-            timer: Timer::new(),
+            timer: Timer::new(1000), // 1000 ticks/sec = 1 tick per ms
         }
-    }
-
-    pub fn tick_devices(&mut self, cycles: u64) {
-        self.timer.tick(cycles);
     }
 
     pub fn read_byte(&self, addr: usize) -> u8 {
@@ -37,18 +34,19 @@ impl Bus {
         self.mem[addr]
     }
 
-    pub fn write_byte(&mut self, addr: usize, value: u8) {
-        if addr >= IO_TIMER_START && addr < IO_TIMER_START + IO_TIMER_SIZE {
-            println!("[BUS] Ignored write to read-only timer at 0x{:05X}", addr);
-            return;
+    pub fn read_u64(&self, addr: usize) -> u64 {
+        if addr == IO_TIMER_START {
+            return self.timer.read_ticks();
         }
 
-        if addr >= SIZE_MEMORY as usize {
-            println!("[BUS] Out-of-bounds write at 0x{:05X}", addr);
-            return;
+        if addr + 8 > SIZE_MEMORY as usize {
+            println!("[BUS] Out-of-bounds u64 read at 0x{:05X}", addr);
+            return 0;
         }
 
-        self.mem[addr] = value;
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&self.mem[addr..addr + 8]);
+        u64::from_le_bytes(bytes)
     }
 
     pub fn load_sector_from_disk(

@@ -9,6 +9,8 @@ use crate::hardware::cpu::Core;
 use crate::hardware::screen;
 use crate::input::handle_input;
 
+use std::time::Instant;
+
 pub struct Motherboard {
     pub cpu: Core,
     pub bus: Bus,
@@ -58,7 +60,9 @@ impl Motherboard {
 
     pub fn step_frame(&mut self) {
         for _ in 0..CYCLES_PER_FRAME {
-            if self.cpu.halted || !self.cpu.running { break; }
+            if self.cpu.halted || !self.cpu.running {
+                break;
+            }
 
             self.cpu.step(&mut self.bus);
         }

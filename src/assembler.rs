@@ -196,6 +196,7 @@ fn compile_source(source_path: &str, use_data_layout: bool, base_address: usize)
             Ok(ST8) | Ok(ST16) | Ok(ST64) => { check_op_type(arg1, Reg) && check_op_type(arg2, Reg) },
             Ok(Jmp) => symbol_table.contains_key(arg1.trim_start_matches(':')) || check_op_type(arg1, Imm),
             Ok(JmpAbs) => check_op_type(arg1, Imm32),
+            Ok(JGE) => check_op_type(arg1, Sym) && check_op_type(arg2, Reg) && check_op_type(arg3, Reg),
             Ok(JumpZero) => check_op_type(arg1, Sym) && check_op_type(arg2, Reg),
             Ok(DTM) => check_op_type(arg1, Imm32) && check_op_type(arg2, Imm32) && check_op_type(arg3, Reg),
             Err(_) => false,

@@ -110,7 +110,7 @@ impl Core{
                     return;
                 }
 
-                self.regs[dest_reg] = bus.mem[addr] as u64;
+                self.regs[dest_reg] = bus.read_byte(addr) as u64;
             }
 
             Ok(LD16) => {
@@ -131,8 +131,8 @@ impl Core{
                     return;
                 }
 
-                let low = bus.mem[addr] as u64;
-                let high = bus.mem[addr + 1] as u64;
+                let low = bus.read_byte(addr) as u64;
+                let high = bus.read_byte(addr + 1) as u64;
 
                 self.regs[dest_reg] = low | (high << 8);
             }
@@ -149,14 +149,7 @@ impl Core{
 
                 let addr = self.regs[src_reg] as usize;
 
-                if addr + 8 > SIZE_MEMORY as usize {
-                    println!("[CPU ERROR] LDQ out of bounds: 0x{:X}", addr);
-                    self.running = false;
-                    return;
-                }
-
-                let bytes = &bus.mem[addr..addr + 8];
-                self.regs[dest_reg] = u64::from_le_bytes(bytes.try_into().unwrap());
+                self.regs[dest_reg] = bus.read_u64(addr);
             }
 
             Ok(ST8) => {
@@ -271,6 +264,8 @@ impl Core{
                     return;
                 }
             }
+
+            Ok(JGE) => { if self.regs[val2] >= self.regs[val3] { self.pc = val1; } }
 
             Err(_) => {
                 println!("[CPU ERROR] Unknown opcode '{}'", opcode);

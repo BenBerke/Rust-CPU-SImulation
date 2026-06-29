@@ -1,22 +1,23 @@
 ; Kernel
-; IO Start = 0x52C00
+; Timer address = 0x52D00
 
 @data
-!io_start dq #0x52C00 ; Pointer to Input MMIO Start
-!keycode_A db #0x41 ; Pointer to ASCII A offset
+!timer_start dq #0x52D00
 
 @text
-.LDI $0 !io_start ; &io_start
-.LDQ $0 $0 ; $0 = 0x52C00
+.LDI $0 !timer_start
+.LDQ $0 $0          ; $0 = 0x52D00, actual timer MMIO address
 
-.LDI $1 !keycode_A
-.LDB $1 $1 ; $1 = 0x41
-
-.ADD $0 $0 $1 ; $0 = Pointer to State of A
+.LDQ $1 $0          ; $1 = start time
 
 :wait
-.LDB $1 $0
-.JZF :wait $1
+.LDQ $2 $0          ; $2 = current time
+.SUB $3 $2 $1       ; $3 = elapsed
+.LDI $4 #1000
+.JGE :done $3 $4
 
-.LDI $0 #1
+.JMP :wait
+
+:done
+.LDI $0 #0
 .HLT
