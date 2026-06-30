@@ -53,4 +53,5 @@ pub const IO_TIMER_SIZE: usize = 8;
 // ==========================
 // Interrupt Mask
 // ==========================
-pub const INT_MASK_TIMER: u8 = 1;
+pub const INT_MASK_TIMER: u32 = 1;
+pub const INT_MASK_KEYBOARD: u32 = 2;
